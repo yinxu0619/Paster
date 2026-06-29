@@ -1,0 +1,23 @@
+# Build artifacts
+build/
+DerivedData/
+*.zip
+
+# macOS
+.DS_Store
+
+# Xcode user data
+xcuserdata/
+*.xcuserstate
+*.xcscmblueprint
+*.moved-aside
+
+# Swift Package Manager
+.build/
+.swiftpm/
+
+# Misc
+*.log
+
+# Local separate git dir (corp security blocks writes under .git/)
+_gitrepo/
