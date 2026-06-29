@@ -1,0 +1,6 @@
+# GitHub Sponsor 按钮配置
+# 文档: https://docs.github.com/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/displaying-a-sponsor-button-in-your-repository
+
+github: [yinxu0619]
+custom:
+  - "https://www.paypal.com/paypalme/yinxu0619"
