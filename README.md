@@ -110,7 +110,16 @@ touch build/Paster.app && killall Finder Dock
 
 ## 赞赏支持
 
-如果觉得好用，欢迎请作者喝杯咖啡 ☕️：微信 / 支付宝（见应用「设置 → 关于」内的收款码），或通过 [PayPal](https://www.paypal.com/paypalme/yinxu0619) 支持。
+如果觉得好用，欢迎请作者喝杯咖啡 ☕️
+
+<table>
+  <tr>
+    <td align="center"><img src="Paster/Resources/Donate/donate_wechat.png" width="220" alt="微信支付"><br/>微信支付</td>
+    <td align="center"><img src="Paster/Resources/Donate/donate_alipay.png" width="220" alt="支付宝"><br/>支付宝</td>
+  </tr>
+</table>
+
+或通过 [PayPal](https://www.paypal.com/paypalme/yinxu0619) 支持。
 
 ## 路线图
 
