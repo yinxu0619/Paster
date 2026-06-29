@@ -54,9 +54,15 @@ else
 fi
 
 echo "==> 拷贝赞赏码等捆绑资源"
-if [ -d "Paster/Resources/Donate" ]; then
-    cp Paster/Resources/Donate/*.png "$RES_DIR/" 2>/dev/null && echo "   已嵌入赞赏码图片" || echo "   Donate 目录为空，跳过"
+shopt -s nullglob
+DONATE_PNGS=(Paster/Resources/Donate/*.png)
+if [ ${#DONATE_PNGS[@]} -gt 0 ]; then
+    cp "${DONATE_PNGS[@]}" "$RES_DIR/"
+    echo "   已嵌入 ${#DONATE_PNGS[@]} 张赞赏码：$(ls "$RES_DIR"/donate_*.png 2>/dev/null | xargs -n1 basename | tr '\n' ' ')"
+else
+    echo "   未找到赞赏码图片（Paster/Resources/Donate/*.png）"
 fi
+shopt -u nullglob
 
 echo "==> 生成 Info.plist"
 cat > "$CONTENTS/Info.plist" <<PLIST
