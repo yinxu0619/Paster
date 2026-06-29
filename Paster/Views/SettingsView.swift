@@ -40,6 +40,15 @@ struct SettingsView: View {
                 Text("点击右侧按钮后按下新的组合键（需包含 ⌘ / ⌥ / ⌃ 之一），按 Esc 取消。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+
+                Picker("无格式粘贴", selection: $settings.plainPasteShortcut) {
+                    ForEach(PlainPasteShortcut.allCases) { shortcut in
+                        Text(shortcut.displayName).tag(shortcut)
+                    }
+                }
+                Text("在面板中选中条目后，按该组合键直接以纯文本（去除格式）粘贴；普通回车为保留格式粘贴。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section("呼出位置") {

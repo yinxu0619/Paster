@@ -1,5 +1,69 @@
 import SwiftUI
 import SwiftData
+import AppKit
+
+/// 横向平铺条下用鼠标滚轮左右选择条目（触控板的精确滚动仍交给 ScrollView 自然滚动）。
+@MainActor
+final class WheelSelector: ObservableObject {
+    private var monitor: Any?
+    /// 触控板精确滚动的累加器与阈值（避免一滑就跳很多项）。
+    private var accumulated: CGFloat = 0
+    private let preciseThreshold: CGFloat = 24
+
+    var ids: [PersistentIdentifier] = []
+    var current: PersistentIdentifier?
+    var onSelect: ((PersistentIdentifier?) -> Void)?
+
+    func start() {
+        guard monitor == nil else { return }
+        monitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
+            guard let self else { return event }
+            // 只处理悬浮面板上的滚轮，避免误吞设置等其它窗口的滚动事件。
+            guard event.window is FloatingPanel else { return event }
+
+            // 取主轴位移：鼠标滚轮多为垂直，触控板可垂直或水平，统一映射为左右切换。
+            let dy = event.scrollingDeltaY != 0 ? event.scrollingDeltaY : event.deltaY
+            let dx = event.scrollingDeltaX != 0 ? event.scrollingDeltaX : event.deltaX
+            let delta = abs(dx) > abs(dy) ? dx : dy
+            guard delta != 0 else { return event }
+
+            if event.hasPreciseScrollingDeltas {
+                // 触控板：累加到阈值再走一格；滑动结束时清零。
+                accumulated += delta
+                if abs(accumulated) >= preciseThreshold {
+                    self.step(accumulated < 0 ? 1 : -1)
+                    accumulated = 0
+                }
+                if event.phase == .ended || event.momentumPhase == .ended {
+                    accumulated = 0
+                }
+            } else {
+                // 鼠标滚轮：每个刻度走一格。
+                self.step(delta < 0 ? 1 : -1)
+            }
+            return nil
+        }
+    }
+
+    func stop() {
+        if let monitor { NSEvent.removeMonitor(monitor) }
+        monitor = nil
+    }
+
+    deinit {
+        if let monitor { NSEvent.removeMonitor(monitor) }
+    }
+
+    private func step(_ direction: Int) {
+        guard !ids.isEmpty else { return }
+        if let current, let index = ids.firstIndex(of: current) {
+            let next = max(0, min(ids.count - 1, index + direction))
+            onSelect?(ids[next])
+        } else {
+            onSelect?(direction >= 0 ? ids.first : ids.last)
+        }
+    }
+}
 
 /// 面板布局形态。
 /// - `vertical`：跟随光标 / 屏幕侧边的竖向卡片列表（默认）。
@@ -27,6 +91,8 @@ struct PanelRootView: View {
     @State private var selectedApp: String?
     /// 搜索框聚焦状态。
     @FocusState private var searchFocused: Bool
+    /// 横向条滚轮选择器。
+    @StateObject private var wheel = WheelSelector()
 
     /// 面板可用操作集合，由 `AppDelegate` 注入。
     let actions: PanelActions
@@ -44,7 +110,12 @@ struct PanelRootView: View {
         .background(.ultraThinMaterial)
         .clipShape(RoundedRectangle(cornerRadius: layout == .bar ? 16 : 12, style: .continuous))
         .onAppear { onPanelAppear() }
-        .onChange(of: orderedVisible.map(\.persistentModelID)) { _, _ in selectDefaultIfNeeded() }
+        .onDisappear { wheel.stop() }
+        .onChange(of: orderedVisible.map(\.persistentModelID)) { _, _ in
+            selectDefaultIfNeeded()
+            syncWheel()
+        }
+        .onChange(of: selectedID) { _, id in wheel.current = id }
     }
 
     // MARK: - 竖向布局（默认）
@@ -60,7 +131,8 @@ struct PanelRootView: View {
             Divider()
             content
         }
-        .frame(width: 360, height: 480)
+        // 填满承载窗口：光标/居中为 360×480，左右侧栏为满屏高度（由 AppDelegate 设定窗口尺寸）。
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     // MARK: - 横向平铺底栏布局
@@ -280,9 +352,24 @@ struct PanelRootView: View {
     // MARK: - 键盘交互
 
     private func handleKeyPress(_ keyPress: KeyPress) -> KeyPress.Result {
+        // 可配置的「无格式粘贴」快捷键（默认 ⌘⇧↩）：需在普通回车之前判断。
+        let relevant: EventModifiers = [.command, .shift, .option, .control]
+        if keyPress.key == .return,
+           keyPress.modifiers.intersection(relevant) == AppSettings.shared.plainPasteShortcut.eventModifiers,
+           let item = selectedItem {
+            actions.pastePlain(item)
+            return .handled
+        }
+
         switch keyPress.key {
         case .escape:
             actions.dismiss()
+            return .handled
+        case .home:
+            if let first = orderedVisible.first?.persistentModelID { selectedID = first }
+            return .handled
+        case .end:
+            if let last = orderedVisible.last?.persistentModelID { selectedID = last }
             return .handled
         case .upArrow:
             moveSelection(by: -1)
@@ -354,8 +441,18 @@ struct PanelRootView: View {
 
     private func onPanelAppear() {
         selectDefaultIfNeeded()
+        // 横向条模式下启用鼠标滚轮左右选择。
+        wheel.onSelect = { id in selectedID = id }
+        syncWheel()
+        if layout == .bar { wheel.start() }
         // 呼出后自动聚焦搜索框。
         DispatchQueue.main.async { searchFocused = true }
+    }
+
+    /// 同步滚轮选择器的候选列表与当前选中项。
+    private func syncWheel() {
+        wheel.ids = orderedVisible.map(\.persistentModelID)
+        wheel.current = selectedID
     }
 
     private func selectDefaultIfNeeded() {

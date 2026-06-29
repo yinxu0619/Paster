@@ -29,7 +29,8 @@ final class FloatingPanel: NSPanel {
         hidesOnDeactivate = false
         isReleasedWhenClosed = false
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        animationBehavior = .utilityWindow
+        // 关闭系统默认窗口动画，改由 AppDelegate 显式做滑入动画，避免两者冲突造成"闪现"。
+        animationBehavior = .none
     }
 
     // 允许面板成为 key window，从而接收键盘事件。

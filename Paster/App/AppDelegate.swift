@@ -174,20 +174,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let actions = panelActions else { return }
         let position = AppSettings.shared.panelPosition
         let isBar = (position == .bottom || position == .top)
+        let isSide = (position == .left || position == .right)
 
         let rootView = PanelRootView(actions: actions, layout: isBar ? .bar : .vertical)
             .modelContainer(PersistenceManager.shared.container)
         let hosting = NSHostingController(rootView: rootView)
-        // 关闭 SwiftUI 内容反向驱动窗口尺寸，否则横向条会被收缩成内容最小宽度。
+        // 关闭 SwiftUI 内容反向驱动窗口尺寸，否则横向条 / 满高侧栏会被收缩成内容最小尺寸。
         hosting.sizingOptions = []
         panel.contentViewController = hosting
 
-        // 内容控制器设置后再指定尺寸，确保横向条铺满屏宽。
+        // 内容控制器设置后再指定尺寸：
+        // - 上/下：铺满屏宽，高度可调；
+        // - 左/右：占满屏幕高度的竖向侧栏；
+        // - 光标/居中：固定 360×480。
+        let visible = currentScreen()?.visibleFrame ?? NSScreen.main?.visibleFrame ?? .zero
         if isBar {
-            let visible = currentScreen()?.visibleFrame ?? NSScreen.main?.visibleFrame ?? .zero
             let width = max(480, visible.width - 24)
             let height = CGFloat(AppSettings.shared.barHeight)
             panel.setContentSize(NSSize(width: width, height: height))
+        } else if isSide {
+            panel.setContentSize(NSSize(width: 360, height: visible.height))
         } else {
             panel.setContentSize(NSSize(width: 360, height: 480))
         }
@@ -215,20 +221,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let finalFrame = NSRect(origin: finalOrigin, size: size)
         let startFrame = NSRect(origin: startOrigin(from: finalOrigin), size: size)
 
+        // 贴边（上下左右）从屏幕边缘滑入，纯位移不淡出；光标/居中则轻量淡入。
+        let position = AppSettings.shared.panelPosition
+        let slides = position != .cursor && position != .center
+
         panel.setFrame(startFrame, display: false)
-        panel.alphaValue = 0
+        panel.alphaValue = slides ? 1 : 0
         NSApp.activate(ignoringOtherApps: true)
         panel.makeKeyAndOrderFront(nil)
 
-        // 横向条从屏幕边缘升起，幅度更大、时长更长；其余位置保持轻量滑入。
         // 用 setFrame(_:display:) 做帧动画（setFrameOrigin 经 animator 不会真正插值），
         // 并在完成回调中兜底归位，避免任何情况下停留在屏幕外。
-        let position = AppSettings.shared.panelPosition
-        let isBar = (position == .bottom || position == .top)
         NSAnimationContext.runAnimationGroup({ context in
-            context.duration = isBar ? 0.28 : 0.16
-            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            panel.animator().alphaValue = 1
+            context.duration = slides ? 0.3 : 0.16
+            // 末段减速的缓出曲线，让滑入更顺滑。
+            context.timingFunction = CAMediaTimingFunction(controlPoints: 0.2, 0.85, 0.25, 1)
+            if !slides { panel.animator().alphaValue = 1 }
             panel.animator().setFrame(finalFrame, display: true)
         }, completionHandler: {
             panel.setFrame(finalFrame, display: true)

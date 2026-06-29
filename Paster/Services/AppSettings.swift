@@ -25,6 +25,7 @@ final class AppSettings: ObservableObject {
         static let hotKeyModifiers = "hotKeyModifiers"
         static let panelPosition = "panelPosition"
         static let barHeight = "barHeight"
+        static let plainPasteShortcut = "plainPasteShortcut"
     }
 
     /// 横向平铺条高度的允许范围。
@@ -80,6 +81,11 @@ final class AppSettings: ObservableObject {
         }
     }
 
+    /// 面板内「无格式粘贴」的快捷键（与回车组合）。
+    @Published var plainPasteShortcut: PlainPasteShortcut {
+        didSet { defaults.set(plainPasteShortcut.rawValue, forKey: Keys.plainPasteShortcut) }
+    }
+
     private init() {
         historyLimit = defaults.object(forKey: Keys.historyLimit) as? Int ?? 200
         excludedBundleIDs = defaults.stringArray(forKey: Keys.excludedBundleIDs) ?? []
@@ -88,6 +94,7 @@ final class AppSettings: ObservableObject {
         hotKeyModifiers = UInt32(defaults.object(forKey: Keys.hotKeyModifiers) as? Int ?? Int(Self.defaultHotKeyModifiers))
         panelPosition = PanelPosition(rawValue: defaults.string(forKey: Keys.panelPosition) ?? "") ?? .cursor
         barHeight = defaults.object(forKey: Keys.barHeight) as? Double ?? 240
+        plainPasteShortcut = PlainPasteShortcut(rawValue: defaults.string(forKey: Keys.plainPasteShortcut) ?? "") ?? .commandShift
     }
 
     /// 恢复默认呼出热键（⌘⇧V）。
