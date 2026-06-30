@@ -8,7 +8,7 @@ final class WheelSelector: ObservableObject {
     private var monitor: Any?
     /// 触控板精确滚动的累加器与阈值（避免一滑就跳很多项）。
     private var accumulated: CGFloat = 0
-    private let preciseThreshold: CGFloat = 24
+    private let preciseThreshold: CGFloat = 10
 
     var ids: [PersistentIdentifier] = []
     var current: PersistentIdentifier?
@@ -28,11 +28,13 @@ final class WheelSelector: ObservableObject {
             guard delta != 0 else { return event }
 
             if event.hasPreciseScrollingDeltas {
-                // 触控板：累加到阈值再走一格；滑动结束时清零。
+                // 触控板：累加到阈值即走格，滑得越快一次跨越的格数越多；滑动结束时清零。
                 accumulated += delta
-                if abs(accumulated) >= preciseThreshold {
-                    self.step(accumulated < 0 ? 1 : -1)
-                    accumulated = 0
+                let steps = Int(accumulated / preciseThreshold)
+                if steps != 0 {
+                    let direction = steps < 0 ? 1 : -1
+                    for _ in 0..<abs(steps) { self.step(direction) }
+                    accumulated -= CGFloat(steps) * preciseThreshold
                 }
                 if event.phase == .ended || event.momentumPhase == .ended {
                     accumulated = 0

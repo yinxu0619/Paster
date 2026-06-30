@@ -215,33 +215,67 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // 每次呼出前按当前设置重建布局与尺寸（竖向卡片 / 全宽横向平铺）。
         configurePanelContent(panel)
 
-        // 根据设置计算最终位置，并从对应边缘滑入。
-        let size = panel.frame.size
-        let finalOrigin = targetOrigin(for: panel)
-        let finalFrame = NSRect(origin: finalOrigin, size: size)
-        let startFrame = NSRect(origin: startOrigin(from: finalOrigin), size: size)
-
-        // 贴边（上下左右）从屏幕边缘滑入，纯位移不淡出；光标/居中则轻量淡入。
-        let position = AppSettings.shared.panelPosition
-        let slides = position != .cursor && position != .center
-
-        panel.setFrame(startFrame, display: false)
-        panel.alphaValue = slides ? 1 : 0
+        // 窗口直接定位到最终位置；滑入动画交给 GPU 加速的内容图层完成（比窗口 setFrame 更丝滑）。
+        panel.setFrameOrigin(targetOrigin(for: panel))
+        panel.alphaValue = 1
         NSApp.activate(ignoringOtherApps: true)
         panel.makeKeyAndOrderFront(nil)
 
-        // 用 setFrame(_:display:) 做帧动画（setFrameOrigin 经 animator 不会真正插值），
-        // 并在完成回调中兜底归位，避免任何情况下停留在屏幕外。
-        NSAnimationContext.runAnimationGroup({ context in
-            context.duration = slides ? 0.3 : 0.16
-            // 末段减速的缓出曲线，让滑入更顺滑。
-            context.timingFunction = CAMediaTimingFunction(controlPoints: 0.2, 0.85, 0.25, 1)
-            if !slides { panel.animator().alphaValue = 1 }
-            panel.animator().setFrame(finalFrame, display: true)
-        }, completionHandler: {
-            panel.setFrame(finalFrame, display: true)
-            panel.alphaValue = 1
-        })
+        animateEntrance(panel)
+    }
+
+    /// 用 Core Animation 在内容图层上做「弹性位移 + 淡入」入场动画（GPU 加速，丝滑流畅，带果冻回弹）。
+    private func animateEntrance(_ panel: FloatingPanel) {
+        guard let contentView = panel.contentView else { return }
+        contentView.wantsLayer = true
+        guard let layer = contentView.layer else { return }
+        layer.removeAnimation(forKey: "paster.slideIn")
+        layer.removeAnimation(forKey: "paster.fadeIn")
+
+        let position = AppSettings.shared.panelPosition
+        let slides = position != .cursor && position != .center
+
+        // 淡入（更快）。
+        let fade = CABasicAnimation(keyPath: "opacity")
+        fade.fromValue = 0
+        fade.toValue = 1
+        fade.duration = 0.16
+        fade.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        layer.add(fade, forKey: "paster.fadeIn")
+
+        // 位移起点（图层 y 轴向上：负值=向下/屏幕下方，正值=向上/屏幕上方）：
+        // - 底部：从下方进入（起点在下方，向上滑出）→ 负值
+        // - 顶部：从上方进入（起点在上方，向下滑出）→ 正值
+        // - 左/右：x 轴为标准方向，从对应侧边进入
+        // - 悬浮/居中：轻微回弹的小位移
+        let size = panel.frame.size
+        let axis: String
+        let from: CGFloat
+        switch position {
+        case .bottom: axis = "transform.translation.y"; from = -size.height
+        case .top:    axis = "transform.translation.y"; from =  size.height
+        case .left:   axis = "transform.translation.x"; from = -size.width
+        case .right:  axis = "transform.translation.x"; from =  size.width
+        case .cursor, .center: axis = "transform.translation.y"; from = -16
+        }
+
+        let spring = CASpringAnimation(keyPath: axis)
+        spring.fromValue = from
+        spring.toValue = 0
+        spring.mass = 1
+        spring.stiffness = 320       // 更高刚度 → 动画更快
+        spring.damping = 18          // 偏低阻尼 → 带果冻回弹
+        spring.initialVelocity = 0
+        spring.duration = spring.settlingDuration
+
+        // 大幅贴边滑入期间临时关闭窗口阴影，避免回弹时出现空阴影框；结束后恢复。
+        if slides {
+            panel.hasShadow = false
+            DispatchQueue.main.asyncAfter(deadline: .now() + spring.settlingDuration) { [weak panel] in
+                panel?.hasShadow = true
+            }
+        }
+        layer.add(spring, forKey: "paster.slideIn")
     }
 
     private func hidePanel() {
@@ -338,7 +372,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .bottom:
             return NSPoint(x: visible.midX - size.width / 2, y: visible.minY + gap)
         case .top:
-            return NSPoint(x: visible.midX - size.width / 2, y: visible.maxY - size.height - gap)
+            // 紧贴屏幕上沿（菜单栏正下方），不留间隙。
+            return NSPoint(x: visible.midX - size.width / 2, y: visible.maxY - size.height)
         case .left:
             return NSPoint(x: visible.minX + gap, y: visible.midY - size.height / 2)
         case .right:
@@ -348,19 +383,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// 滑入动画的起始坐标：从对应边缘方向偏移。
-    /// 上/下横向条整体从屏幕外升起（幅度等于面板高度），侧边/光标则轻量偏移。
-    private func startOrigin(from finalOrigin: NSPoint) -> NSPoint {
-        let size = panel?.frame.size ?? .zero
-        let edge: CGFloat = 22
-        switch AppSettings.shared.panelPosition {
-        case .bottom: return NSPoint(x: finalOrigin.x, y: finalOrigin.y - (size.height + 16))
-        case .top:    return NSPoint(x: finalOrigin.x, y: finalOrigin.y + (size.height + 16))
-        case .left:   return NSPoint(x: finalOrigin.x - edge, y: finalOrigin.y)
-        case .right:  return NSPoint(x: finalOrigin.x + edge, y: finalOrigin.y)
-        case .cursor, .center: return finalOrigin
-        }
-    }
 }
 
 // MARK: - NSWindowDelegate
