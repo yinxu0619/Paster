@@ -65,7 +65,7 @@ struct ClipboardCardView: View {
             Image(nsImage: AppIconProvider.shared.icon(forBundleID: item.sourceBundleID))
                 .resizable()
                 .frame(width: 16, height: 16)
-            Text(item.sourceAppName ?? "未知来源")
+            Text(item.sourceAppName ?? L10n.tr("card.unknownSource"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
@@ -114,7 +114,7 @@ struct ClipboardCardView: View {
                 .frame(maxWidth: .infinity, maxHeight: fillHeight ? .infinity : 120, alignment: .leading)
                 .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
         } else {
-            Label("图片", systemImage: "photo")
+            Label(L10n.tr("card.image"), systemImage: "photo")
                 .foregroundStyle(.secondary)
         }
     }

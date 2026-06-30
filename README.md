@@ -1,5 +1,7 @@
 # Paster — macOS 原生剪贴板管理工具
 
+[English README](README.en.md)
+
 一款 macOS 原生剪贴板历史工具。后台实时记录剪贴板，全局热键呼出面板，支持文本 / 富文本 / 图片 / 文件 / 链接，本地存储、不联网。
 
 > 本工程通过多轮增量迭代完成 V1.0（macOS 端），代码全部基于上一轮成果扩展，未推翻重写。
@@ -17,6 +19,7 @@
 - **隐私与配置**：排除应用列表（敏感应用不记录）、历史留存数量上限、一键清空、开机自启、菜单栏常驻。
 - **体验**：卡片式布局、图片缩略图、悬停 / 选中动效、呼出滑入 / 升起动画、深色 / 浅色与多屏适配。
 - **关于页**：应用简介与赞赏码（微信 / 支付宝 / PayPal）。
+- **多语言**：简体中文 / English，可在设置中切换或跟随系统语言。
 
 ## 技术栈
 
@@ -34,15 +37,17 @@
 Paster/
   App/         PasterApp.swift（入口）, AppDelegate.swift（状态栏/热键/面板/预览/设置）
   Models/      ClipboardItem.swift（@Model）, ClipboardItemType.swift, PanelPosition.swift,
-               PlainPasteShortcut.swift
+               PlainPasteShortcut.swift, AppLanguage.swift
   Services/    PersistenceManager.swift, ClipboardMonitor.swift, HotKeyManager.swift,
                PasteService.swift, AppSettings.swift
   ViewModels/  ClipboardViewModel.swift, SettingsViewModel.swift
   Views/       PanelRootView.swift, ClipboardCardView.swift, SearchBarView.swift,
                SettingsView.swift, PreviewView.swift, AboutView.swift, HotKeyRecorder.swift
   Window/      FloatingPanel.swift（NSPanel）
-  Utilities/   ImageUtils.swift, AppIconProvider.swift, KeyCodeTranslator.swift
-  Resources/   Assets.xcassets, Paster.entitlements, Paster.icns, Donate/（赞赏码）
+  Utilities/   ImageUtils.swift, AppIconProvider.swift, KeyCodeTranslator.swift,
+               Localization.swift
+  Resources/   Assets.xcassets, Paster.entitlements, Paster.icns, Donate/（赞赏码）,
+               zh-Hans.lproj/ en.lproj/（本地化）
 scripts/       build_check.sh（编译/类型检查校验）, build_app.sh（手动打包 .app）,
                make_icon.swift / make_icns.swift（图标生成）
 ```

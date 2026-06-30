@@ -1,0 +1,115 @@
+/* Settings tabs */
+"tab.general" = "General";
+"tab.privacy" = "Privacy";
+"tab.about" = "About";
+
+/* Language */
+"language.system" = "Follow System";
+"language.zh_hans" = "简体中文";
+"language.en" = "English";
+
+/* General settings */
+"settings.language" = "Language";
+"settings.languagePicker" = "Interface Language";
+"settings.startup" = "Startup";
+"settings.launchAtLogin" = "Launch Paster at login";
+"settings.shortcuts" = "Shortcuts";
+"settings.showPanel" = "Show Panel";
+"settings.resetDefault" = "Reset to Default";
+"settings.hotkeyHint" = "Click the button, then press a new shortcut (must include ⌘, ⌥, or ⌃). Press Esc to cancel.";
+"settings.plainPaste" = "Plain Text Paste";
+"settings.plainPasteHint" = "With an item selected in the panel, use this shortcut to paste as plain text. Return keeps formatting.";
+"settings.panelPosition" = "Panel Position";
+"settings.panelPositionPicker" = "Panel appears at";
+"settings.panelPositionHint" = "Follow the cursor, or dock to a screen edge.";
+"settings.barHeight" = "Bar Height";
+"settings.barHeightUnit" = "%d pt";
+"settings.barHeightHint" = "The bar spans the screen width. You can also drag the top edge after opening the panel.";
+"settings.history" = "History";
+"settings.historyLimit" = "History limit";
+"settings.historyLimitCount" = "%d items";
+"settings.historyLimitHint" = "When the limit is exceeded, oldest unpinned items are removed. Pinned items are kept.";
+"settings.clearAllHistory" = "Clear All History";
+"settings.clearConfirm" = "Clear all clipboard history? This cannot be undone.";
+"settings.clear" = "Clear All";
+"settings.cancel" = "Cancel";
+
+/* Privacy settings */
+"settings.excludedApps" = "Excluded Apps";
+"settings.excludedAppsHint" = "Clipboard content from these apps will not be recorded (e.g. password managers).";
+"settings.refreshApps" = "Refresh App List";
+"settings.noExcludedApps" = "No apps excluded yet";
+"settings.addApp" = "Add App";
+
+/* About */
+"about.intro" = "About";
+"about.description" = "Paster is a native macOS clipboard manager. It records text, rich text, images, files, and links in the background, with global hotkey access, search, pinning, and multiple paste modes. All data stays on your device — no network, no uploads.";
+"about.donate" = "If you find Paster useful, consider buying the author a coffee ☕️";
+"about.wechat" = "WeChat Pay";
+"about.alipay" = "Alipay";
+"about.paypal" = "Support via PayPal";
+"about.thanks" = "Thank you for your support!";
+
+/* Panel */
+"panel.itemCount" = "%lld items";
+"panel.emptyHistory" = "No clipboard history yet";
+"panel.noMatch" = "No matching items";
+"panel.emptyHint" = "Copy text, images, files, or links and they will appear here";
+"panel.pinned" = "Pinned";
+"panel.history" = "History";
+
+/* Context menu */
+"menu.paste" = "Paste";
+"menu.pastePlain" = "Paste as Plain Text";
+"menu.copy" = "Copy Again";
+"menu.preview" = "Full Preview";
+"menu.pin" = "Pin to Top";
+"menu.unpin" = "Unpin";
+"menu.delete" = "Delete";
+
+/* Search */
+"search.placeholder" = "Search clipboard…";
+"search.allSources" = "All Sources";
+
+/* Preview */
+"preview.unknownSource" = "Unknown Source";
+"preview.emptyContent" = "(empty)";
+"preview.imageFailed" = "Unable to preview image";
+"preview.windowTitle" = "Preview · %@";
+
+/* Clipboard item types */
+"type.text" = "Text";
+"type.richText" = "Rich Text";
+"type.image" = "Image";
+"type.file" = "File";
+"type.url" = "Link";
+
+/* Panel positions */
+"position.cursor" = "Follow Cursor (Floating)";
+"position.bottom" = "Bottom of Screen";
+"position.top" = "Top of Screen";
+"position.left" = "Left of Screen";
+"position.right" = "Right of Screen";
+"position.center" = "Center of Screen";
+
+/* Status bar menu */
+"menu.showHistory" = "Show Clipboard History";
+"menu.clearHistory" = "Clear All History";
+"menu.settings" = "Settings…";
+"menu.quit" = "Quit Paster";
+"menu.settingsWindowTitle" = "Paster Settings";
+
+/* Alerts */
+"alert.clearTitle" = "Clear all clipboard history?";
+"alert.clearMessage" = "This cannot be undone.";
+"alert.accessibilityTitle" = "Accessibility Permission Required";
+"alert.accessibilityMessage" = "Paster simulates ⌘V to paste automatically, which requires Accessibility permission.\n\nOpen System Settings › Privacy & Security › Accessibility, enable Paster, then try again.\n\nNote: Rebuilding the app changes its signature. If an old Paster entry exists, remove it with \"−\" and add this build again.\n\n(Content is already on the clipboard — you can also press ⌘V in the target app.)";
+"alert.openAccessibility" = "Open Accessibility Settings";
+"alert.ok" = "OK";
+
+/* Hot key recorder */
+"hotkey.pressShortcut" = "Press shortcut…";
+
+/* Card */
+"card.unknownSource" = "Unknown Source";
+"card.image" = "Image";

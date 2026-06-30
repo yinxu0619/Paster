@@ -83,23 +83,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func popUpStatusMenu() {
         let menu = NSMenu()
 
-        let showItem = NSMenuItem(title: "显示剪贴板历史", action: #selector(showPanelFromMenu), keyEquivalent: "")
+        let showItem = NSMenuItem(title: L10n.tr("menu.showHistory"), action: #selector(showPanelFromMenu), keyEquivalent: "")
         showItem.target = self
         menu.addItem(showItem)
 
         menu.addItem(.separator())
 
-        let clearItem = NSMenuItem(title: "清空全部历史", action: #selector(clearAllHistory), keyEquivalent: "")
+        let clearItem = NSMenuItem(title: L10n.tr("menu.clearHistory"), action: #selector(clearAllHistory), keyEquivalent: "")
         clearItem.target = self
         menu.addItem(clearItem)
 
-        let settingsItem = NSMenuItem(title: "设置…", action: #selector(openSettings), keyEquivalent: ",")
+        let settingsItem = NSMenuItem(title: L10n.tr("menu.settings"), action: #selector(openSettings), keyEquivalent: ",")
         settingsItem.target = self
         menu.addItem(settingsItem)
 
         menu.addItem(.separator())
 
-        let quitItem = NSMenuItem(title: "退出 Paster", action: #selector(quit), keyEquivalent: "q")
+        let quitItem = NSMenuItem(title: L10n.tr("menu.quit"), action: #selector(quit), keyEquivalent: "q")
         quitItem.target = self
         menu.addItem(quitItem)
 
@@ -114,11 +114,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func clearAllHistory() {
         let alert = NSAlert()
-        alert.messageText = "清空全部剪贴板历史？"
-        alert.informativeText = "此操作不可恢复。"
+        alert.messageText = L10n.tr("alert.clearTitle")
+        alert.informativeText = L10n.tr("alert.clearMessage")
         alert.alertStyle = .warning
-        alert.addButton(withTitle: "清空全部")
-        alert.addButton(withTitle: "取消")
+        alert.addButton(withTitle: L10n.tr("settings.clear"))
+        alert.addButton(withTitle: L10n.tr("settings.cancel"))
         if alert.runModal() == .alertFirstButtonReturn {
             viewModel?.clearAll()
         }
@@ -130,13 +130,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // 菜单栏常驻应用没有标准主菜单，SwiftUI 的 showSettingsWindow: 往往无响应者，
         // 因此这里自建并复用一个承载 SettingsView 的窗口，行为稳定可靠。
         if let window = settingsWindow {
+            window.title = L10n.tr("menu.settingsWindowTitle")
             window.makeKeyAndOrderFront(nil)
             return
         }
 
         let hosting = NSHostingController(rootView: SettingsView())
         let window = NSWindow(contentViewController: hosting)
-        window.title = "Paster 设置"
+        window.title = L10n.tr("menu.settingsWindowTitle")
         window.styleMask = [.titled, .closable, .miniaturizable]
         window.setContentSize(NSSize(width: 460, height: 420))
         window.center()
@@ -293,7 +294,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         let hosting = NSHostingController(rootView: view)
         let window = NSWindow(contentViewController: hosting)
-        window.title = "预览 · \(item.type.displayName)"
+        window.title = L10n.tr("preview.windowTitle", item.type.displayName)
         window.styleMask = [.titled, .closable, .resizable, .fullSizeContentView]
         window.setContentSize(NSSize(width: 680, height: 520))
         window.center()
@@ -329,19 +330,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hidePanel()
 
         let alert = NSAlert()
-        alert.messageText = "需要「辅助功能」权限"
-        alert.informativeText = """
-        Paster 通过模拟 ⌘V 自动粘贴，这需要"辅助功能"权限。
-
-        请在 系统设置 › 隐私与安全性 › 辅助功能 中勾选 Paster，然后重试。
-
-        提示：每次重新打包后签名会变化，系统可能要求重新授权——如果列表里已有旧的 Paster，请先用「−」移除，再重新添加这一份。
-
-        （内容已复制到剪贴板，你也可以直接在目标应用按 ⌘V 粘贴。）
-        """
+        alert.messageText = L10n.tr("alert.accessibilityTitle")
+        alert.informativeText = L10n.tr("alert.accessibilityMessage")
         alert.alertStyle = .informational
-        alert.addButton(withTitle: "打开辅助功能设置")
-        alert.addButton(withTitle: "好")
+        alert.addButton(withTitle: L10n.tr("alert.openAccessibility"))
+        alert.addButton(withTitle: L10n.tr("alert.ok"))
         NSApp.activate(ignoringOtherApps: true)
         if alert.runModal() == .alertFirstButtonReturn,
            let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {

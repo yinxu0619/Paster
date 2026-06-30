@@ -1,0 +1,115 @@
+/* Settings tabs */
+"tab.general" = "通用";
+"tab.privacy" = "隐私";
+"tab.about" = "关于";
+
+/* Language */
+"language.system" = "跟随系统";
+"language.zh_hans" = "简体中文";
+"language.en" = "English";
+
+/* General settings */
+"settings.language" = "语言";
+"settings.languagePicker" = "界面语言";
+"settings.startup" = "启动";
+"settings.launchAtLogin" = "登录时自动启动 Paster";
+"settings.shortcuts" = "快捷键";
+"settings.showPanel" = "呼出面板";
+"settings.resetDefault" = "恢复默认";
+"settings.hotkeyHint" = "点击右侧按钮后按下新的组合键（需包含 ⌘ / ⌥ / ⌃ 之一），按 Esc 取消。";
+"settings.plainPaste" = "无格式粘贴";
+"settings.plainPasteHint" = "在面板中选中条目后，按该组合键直接以纯文本（去除格式）粘贴；普通回车为保留格式粘贴。";
+"settings.panelPosition" = "呼出位置";
+"settings.panelPositionPicker" = "面板出现在";
+"settings.panelPositionHint" = "可选择跟随光标悬浮，或固定从屏幕某一侧滑出。";
+"settings.barHeight" = "横向条高度";
+"settings.barHeightUnit" = "%d pt";
+"settings.barHeightHint" = "横向条铺满屏幕宽度；也可在呼出后直接拖拽面板上边缘调整高度。";
+"settings.history" = "历史";
+"settings.historyLimit" = "历史留存数量上限";
+"settings.historyLimitCount" = "%d 条";
+"settings.historyLimitHint" = "超出上限时会自动删除最旧的未固定记录，固定项不受影响。";
+"settings.clearAllHistory" = "清空全部历史";
+"settings.clearConfirm" = "确定要清空全部剪贴板历史吗？此操作不可恢复。";
+"settings.clear" = "清空全部";
+"settings.cancel" = "取消";
+
+/* Privacy settings */
+"settings.excludedApps" = "排除应用";
+"settings.excludedAppsHint" = "以下应用复制的内容不会被记录（适用于密码管理器等敏感应用）。";
+"settings.refreshApps" = "刷新应用列表";
+"settings.noExcludedApps" = "尚未排除任何应用";
+"settings.addApp" = "添加应用";
+
+/* About */
+"about.intro" = "简介";
+"about.description" = "Paster 是一款 macOS 原生剪贴板管理工具：后台自动记录文本、富文本、图片、文件与链接，支持全局热键呼出、搜索筛选、固定置顶与多模式粘贴。数据 100%% 本地存储，不联网、不上传。";
+"about.donate" = "如果觉得好用，欢迎请作者喝杯咖啡 ☕️";
+"about.wechat" = "微信支付";
+"about.alipay" = "支付宝";
+"about.paypal" = "使用 PayPal 支持";
+"about.thanks" = "感谢你的支持！";
+
+/* Panel */
+"panel.itemCount" = "%lld 条";
+"panel.emptyHistory" = "暂无剪贴板历史";
+"panel.noMatch" = "没有匹配的内容";
+"panel.emptyHint" = "复制文本、图片、文件或链接后会自动出现在这里";
+"panel.pinned" = "固定";
+"panel.history" = "历史";
+
+/* Context menu */
+"menu.paste" = "粘贴";
+"menu.pastePlain" = "纯文本粘贴";
+"menu.copy" = "重新复制";
+"menu.preview" = "全屏预览";
+"menu.pin" = "固定到顶部";
+"menu.unpin" = "取消固定";
+"menu.delete" = "删除";
+
+/* Search */
+"search.placeholder" = "搜索剪贴板…";
+"search.allSources" = "全部来源";
+
+/* Preview */
+"preview.unknownSource" = "未知来源";
+"preview.emptyContent" = "（空内容）";
+"preview.imageFailed" = "无法预览图片";
+"preview.windowTitle" = "预览 · %@";
+
+/* Clipboard item types */
+"type.text" = "文本";
+"type.richText" = "富文本";
+"type.image" = "图片";
+"type.file" = "文件";
+"type.url" = "链接";
+
+/* Panel positions */
+"position.cursor" = "跟随光标（悬浮）";
+"position.bottom" = "屏幕底部";
+"position.top" = "屏幕顶部";
+"position.left" = "屏幕左侧";
+"position.right" = "屏幕右侧";
+"position.center" = "屏幕中央";
+
+/* Status bar menu */
+"menu.showHistory" = "显示剪贴板历史";
+"menu.clearHistory" = "清空全部历史";
+"menu.settings" = "设置…";
+"menu.quit" = "退出 Paster";
+"menu.settingsWindowTitle" = "Paster 设置";
+
+/* Alerts */
+"alert.clearTitle" = "清空全部剪贴板历史？";
+"alert.clearMessage" = "此操作不可恢复。";
+"alert.accessibilityTitle" = "需要「辅助功能」权限";
+"alert.accessibilityMessage" = "Paster 通过模拟 ⌘V 自动粘贴，这需要\"辅助功能\"权限。\n\n请在 系统设置 › 隐私与安全性 › 辅助功能 中勾选 Paster，然后重试。\n\n提示：每次重新打包后签名会变化，系统可能要求重新授权——如果列表里已有旧的 Paster，请先用「−」移除，再重新添加这一份。\n\n（内容已复制到剪贴板，你也可以直接在目标应用按 ⌘V 粘贴。）";
+"alert.openAccessibility" = "打开辅助功能设置";
+"alert.ok" = "好";
+
+/* Hot key recorder */
+"hotkey.pressShortcut" = "请按下快捷键…";
+
+/* Card */
+"card.unknownSource" = "未知来源";
+"card.image" = "图片";

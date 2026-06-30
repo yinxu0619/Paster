@@ -64,6 +64,14 @@ else
 fi
 shopt -u nullglob
 
+echo "==> 拷贝本地化资源"
+for lproj in Paster/Resources/*.lproj; do
+    if [ -d "$lproj" ]; then
+        cp -R "$lproj" "$RES_DIR/"
+        echo "   已嵌入 $(basename "$lproj")"
+    fi
+done
+
 echo "==> 生成 Info.plist"
 cat > "$CONTENTS/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -71,7 +79,12 @@ cat > "$CONTENTS/Info.plist" <<PLIST
 <plist version="1.0">
 <dict>
     <key>CFBundleDevelopmentRegion</key>
-    <string>zh_CN</string>
+    <string>zh-Hans</string>
+    <key>CFBundleLocalizations</key>
+    <array>
+        <string>zh-Hans</string>
+        <string>en</string>
+    </array>
     <key>CFBundleExecutable</key>
     <string>$APP_NAME</string>
     <key>CFBundleIdentifier</key>

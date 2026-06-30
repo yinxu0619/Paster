@@ -84,6 +84,7 @@ enum PanelLayout {
 /// - 第 6 轮：新增横向平铺底栏布局（`PanelLayout.bar`），支持左右键导航。
 struct PanelRootView: View {
     @Query(sort: \ClipboardItem.createdAt, order: .reverse) private var items: [ClipboardItem]
+    @ObservedObject private var settings = AppSettings.shared
 
     /// 选中项（用于键盘导航与回车粘贴）。
     @State private var selectedID: PersistentIdentifier?
@@ -118,6 +119,7 @@ struct PanelRootView: View {
             syncWheel()
         }
         .onChange(of: selectedID) { _, id in wheel.current = id }
+        .id(settings.appLanguage)
     }
 
     // MARK: - 竖向布局（默认）
@@ -154,7 +156,7 @@ struct PanelRootView: View {
                 .foregroundStyle(.secondary)
             Text("Paster")
                 .font(.headline)
-            Text("\(orderedVisible.count) 条")
+            Text(L10n.tr("panel.itemCount", Int64(orderedVisible.count)))
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Spacer(minLength: 12)
@@ -217,7 +219,7 @@ struct PanelRootView: View {
             Text("Paster")
                 .font(.headline)
             Spacer()
-            Text("\(orderedVisible.count) 条")
+            Text(L10n.tr("panel.itemCount", Int64(orderedVisible.count)))
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -242,10 +244,10 @@ struct PanelRootView: View {
             Image(systemName: items.isEmpty ? "tray" : "magnifyingglass")
                 .font(.system(size: 36))
                 .foregroundStyle(.tertiary)
-            Text(items.isEmpty ? "暂无剪贴板历史" : "没有匹配的内容")
+            Text(items.isEmpty ? L10n.tr("panel.emptyHistory") : L10n.tr("panel.noMatch"))
                 .foregroundStyle(.secondary)
             if items.isEmpty {
-                Text("复制文本、图片、文件或链接后会自动出现在这里")
+                Text(L10n.tr("panel.emptyHint"))
                     .font(.caption)
                     .foregroundStyle(.tertiary)
                     .multilineTextAlignment(.center)
@@ -261,12 +263,12 @@ struct PanelRootView: View {
                 // LazyVStack 仅渲染可见卡片，支持百条以上历史流畅滚动。
                 LazyVStack(alignment: .leading, spacing: 8) {
                     if !pinnedItems.isEmpty {
-                        sectionHeader("固定", systemImage: "pin.fill")
+                        sectionHeader(L10n.tr("panel.pinned"), systemImage: "pin.fill")
                         ForEach(pinnedItems) { card(for: $0) }
                     }
                     if !unpinnedItems.isEmpty {
                         if !pinnedItems.isEmpty {
-                            sectionHeader("历史", systemImage: "clock")
+                            sectionHeader(L10n.tr("panel.history"), systemImage: "clock")
                         }
                         ForEach(unpinnedItems) { card(for: $0) }
                     }
@@ -305,13 +307,13 @@ struct PanelRootView: View {
 
     @ViewBuilder
     private func contextMenu(for item: ClipboardItem) -> some View {
-        Button("粘贴") { actions.paste(item) }
-        Button("纯文本粘贴") { actions.pastePlain(item) }
-        Button("重新复制") { actions.copy(item) }
-        Button("全屏预览") { actions.preview(item) }
+        Button(L10n.tr("menu.paste")) { actions.paste(item) }
+        Button(L10n.tr("menu.pastePlain")) { actions.pastePlain(item) }
+        Button(L10n.tr("menu.copy")) { actions.copy(item) }
+        Button(L10n.tr("menu.preview")) { actions.preview(item) }
         Divider()
-        Button(item.isPinned ? "取消固定" : "固定到顶部") { actions.togglePin(item) }
-        Button("删除", role: .destructive) { actions.delete(item) }
+        Button(item.isPinned ? L10n.tr("menu.unpin") : L10n.tr("menu.pin")) { actions.togglePin(item) }
+        Button(L10n.tr("menu.delete"), role: .destructive) { actions.delete(item) }
     }
 
     // MARK: - 数据筛选与分组

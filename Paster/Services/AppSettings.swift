@@ -26,6 +26,7 @@ final class AppSettings: ObservableObject {
         static let panelPosition = "panelPosition"
         static let barHeight = "barHeight"
         static let plainPasteShortcut = "plainPasteShortcut"
+        static let appLanguage = "appLanguage"
     }
 
     /// 横向平铺条高度的允许范围。
@@ -86,6 +87,14 @@ final class AppSettings: ObservableObject {
         didSet { defaults.set(plainPasteShortcut.rawValue, forKey: Keys.plainPasteShortcut) }
     }
 
+    /// 界面语言（跟随系统 / 简体中文 / English）。
+    @Published var appLanguage: AppLanguage {
+        didSet { defaults.set(appLanguage.rawValue, forKey: Keys.appLanguage) }
+    }
+
+    /// 实际生效的语言代码，供界面刷新标识等使用。
+    var resolvedLanguageCode: String { L10n.resolvedLanguageCode }
+
     private init() {
         historyLimit = defaults.object(forKey: Keys.historyLimit) as? Int ?? 200
         excludedBundleIDs = defaults.stringArray(forKey: Keys.excludedBundleIDs) ?? []
@@ -95,6 +104,7 @@ final class AppSettings: ObservableObject {
         panelPosition = PanelPosition(rawValue: defaults.string(forKey: Keys.panelPosition) ?? "") ?? .cursor
         barHeight = defaults.object(forKey: Keys.barHeight) as? Double ?? 240
         plainPasteShortcut = PlainPasteShortcut(rawValue: defaults.string(forKey: Keys.plainPasteShortcut) ?? "") ?? .commandShift
+        appLanguage = AppLanguage(rawValue: defaults.string(forKey: Keys.appLanguage) ?? "") ?? .system
     }
 
     /// 恢复默认呼出热键（⌘⇧V）。

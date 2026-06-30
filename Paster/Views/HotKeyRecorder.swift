@@ -48,7 +48,7 @@ final class HotKeyRecorderButton: NSButton {
 
     private func startRecording() {
         isRecording = true
-        title = "请按下快捷键…"
+        title = L10n.tr("hotkey.pressShortcut")
         eventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown]) { [weak self] event in
             self?.handle(event)
             return nil // 录制期间拦截按键
@@ -89,6 +89,8 @@ final class HotKeyRecorderButton: NSButton {
 struct HotKeyRecorder: NSViewRepresentable {
     @Binding var keyCode: UInt32
     @Binding var modifiers: UInt32
+    /// 语言切换时触发 `updateNSView`，刷新录制占位文案。
+    var languageToken: String = ""
 
     func makeNSView(context: Context) -> HotKeyRecorderButton {
         let button = HotKeyRecorderButton()

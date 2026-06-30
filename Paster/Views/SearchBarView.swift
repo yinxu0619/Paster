@@ -16,7 +16,7 @@ struct SearchBarView: View {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(.secondary)
 
-            TextField("搜索剪贴板…", text: $searchText)
+            TextField(L10n.tr("search.placeholder"), text: $searchText)
                 .textFieldStyle(.plain)
                 .focused(focus)
                 .onKeyPress(action: onKey)
@@ -42,7 +42,7 @@ struct SearchBarView: View {
             Button {
                 selectedApp = nil
             } label: {
-                Label("全部来源", systemImage: selectedApp == nil ? "checkmark" : "")
+                Label(L10n.tr("search.allSources"), systemImage: selectedApp == nil ? "checkmark" : "")
             }
             if !appNames.isEmpty {
                 Divider()

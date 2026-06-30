@@ -12,106 +12,116 @@ struct SettingsView: View {
     var body: some View {
         TabView {
             generalTab
-                .tabItem { Label("通用", systemImage: "gearshape") }
+                .tabItem { Label(L10n.tr("tab.general"), systemImage: "gearshape") }
             privacyTab
-                .tabItem { Label("隐私", systemImage: "hand.raised") }
+                .tabItem { Label(L10n.tr("tab.privacy"), systemImage: "hand.raised") }
             AboutView()
-                .tabItem { Label("关于", systemImage: "info.circle") }
+                .tabItem { Label(L10n.tr("tab.about"), systemImage: "info.circle") }
         }
         .frame(width: 460, height: 420)
+        .id(settings.appLanguage)
     }
 
     // MARK: - 通用
 
     private var generalTab: some View {
         Form {
-            Section("启动") {
-                Toggle("登录时自动启动 Paster", isOn: $settings.launchAtLogin)
+            Section(L10n.tr("settings.language")) {
+                Picker(L10n.tr("settings.languagePicker"), selection: $settings.appLanguage) {
+                    ForEach(AppLanguage.allCases) { language in
+                        Text(language.displayName).tag(language)
+                    }
+                }
             }
 
-            Section("快捷键") {
+            Section(L10n.tr("settings.startup")) {
+                Toggle(L10n.tr("settings.launchAtLogin"), isOn: $settings.launchAtLogin)
+            }
+
+            Section(L10n.tr("settings.shortcuts")) {
                 HStack {
-                    Text("呼出面板")
+                    Text(L10n.tr("settings.showPanel"))
                     Spacer()
-                    HotKeyRecorder(keyCode: $settings.hotKeyCode, modifiers: $settings.hotKeyModifiers)
+                    HotKeyRecorder(keyCode: $settings.hotKeyCode, modifiers: $settings.hotKeyModifiers,
+                                   languageToken: settings.appLanguage.rawValue)
                         .frame(width: 150, height: 24)
-                    Button("恢复默认") { settings.resetHotKeyToDefault() }
+                    Button(L10n.tr("settings.resetDefault")) { settings.resetHotKeyToDefault() }
                 }
-                Text("点击右侧按钮后按下新的组合键（需包含 ⌘ / ⌥ / ⌃ 之一），按 Esc 取消。")
+                Text(L10n.tr("settings.hotkeyHint"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                Picker("无格式粘贴", selection: $settings.plainPasteShortcut) {
+                Picker(L10n.tr("settings.plainPaste"), selection: $settings.plainPasteShortcut) {
                     ForEach(PlainPasteShortcut.allCases) { shortcut in
                         Text(shortcut.displayName).tag(shortcut)
                     }
                 }
-                Text("在面板中选中条目后，按该组合键直接以纯文本（去除格式）粘贴；普通回车为保留格式粘贴。")
+                Text(L10n.tr("settings.plainPasteHint"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
-            Section("呼出位置") {
-                Picker("面板出现在", selection: $settings.panelPosition) {
+            Section(L10n.tr("settings.panelPosition")) {
+                Picker(L10n.tr("settings.panelPositionPicker"), selection: $settings.panelPosition) {
                     ForEach(PanelPosition.allCases) { position in
                         Text(position.displayName).tag(position)
                     }
                 }
-                Text("可选择跟随光标悬浮，或固定从屏幕某一侧滑出（类似 Paste 的底部停靠）。")
+                Text(L10n.tr("settings.panelPositionHint"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
                 if settings.panelPosition == .bottom || settings.panelPosition == .top {
                     VStack(alignment: .leading, spacing: 6) {
                         HStack {
-                            Text("横向条高度")
+                            Text(L10n.tr("settings.barHeight"))
                             Spacer()
-                            Text("\(Int(settings.barHeight)) pt")
+                            Text(L10n.tr("settings.barHeightUnit", Int(settings.barHeight)))
                                 .foregroundStyle(.secondary)
                                 .monospacedDigit()
                         }
                         Slider(value: $settings.barHeight,
                                in: AppSettings.barHeightRange,
                                step: 10) {
-                            Text("横向条高度")
+                            Text(L10n.tr("settings.barHeight"))
                         } minimumValueLabel: {
                             Image(systemName: "rectangle.compress.vertical")
                         } maximumValueLabel: {
                             Image(systemName: "rectangle.expand.vertical")
                         }
                         barHeightPreview
-                        Text("横向条铺满屏幕宽度；也可在呼出后直接拖拽面板上边缘调整高度。")
+                        Text(L10n.tr("settings.barHeightHint"))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
                 }
             }
 
-            Section("历史") {
+            Section(L10n.tr("settings.history")) {
                 Stepper(value: $settings.historyLimit, in: 20...2000, step: 20) {
                     HStack {
-                        Text("历史留存数量上限")
+                        Text(L10n.tr("settings.historyLimit"))
                         Spacer()
-                        Text("\(settings.historyLimit) 条")
+                        Text(L10n.tr("settings.historyLimitCount", settings.historyLimit))
                             .foregroundStyle(.secondary)
                     }
                 }
-                Text("超出上限时会自动删除最旧的未固定记录，固定项不受影响。")
+                Text(L10n.tr("settings.historyLimitHint"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
                 Button(role: .destructive) {
                     showingClearConfirm = true
                 } label: {
-                    Label("清空全部历史", systemImage: "trash")
+                    Label(L10n.tr("settings.clearAllHistory"), systemImage: "trash")
                 }
-                .confirmationDialog("确定要清空全部剪贴板历史吗？此操作不可恢复。",
+                .confirmationDialog(L10n.tr("settings.clearConfirm"),
                                     isPresented: $showingClearConfirm,
                                     titleVisibility: .visible) {
-                    Button("清空全部", role: .destructive) {
+                    Button(L10n.tr("settings.clear"), role: .destructive) {
                         viewModel.clearAllHistory()
                     }
-                    Button("取消", role: .cancel) {}
+                    Button(L10n.tr("settings.cancel"), role: .cancel) {}
                 }
             }
         }
@@ -150,9 +160,9 @@ struct SettingsView: View {
 
     private var privacyTab: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("排除应用")
+            Text(L10n.tr("settings.excludedApps"))
                 .font(.headline)
-            Text("以下应用复制的内容不会被记录（适用于密码管理器等敏感应用）。")
+            Text(L10n.tr("settings.excludedAppsHint"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
@@ -164,7 +174,7 @@ struct SettingsView: View {
                 Button {
                     viewModel.refreshRunningApps()
                 } label: {
-                    Label("刷新应用列表", systemImage: "arrow.clockwise")
+                    Label(L10n.tr("settings.refreshApps"), systemImage: "arrow.clockwise")
                 }
             }
         }
@@ -174,7 +184,7 @@ struct SettingsView: View {
     private var excludedList: some View {
         Group {
             if settings.excludedBundleIDs.isEmpty {
-                Text("尚未排除任何应用")
+                Text(L10n.tr("settings.noExcludedApps"))
                     .foregroundStyle(.tertiary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
@@ -217,7 +227,7 @@ struct SettingsView: View {
                 }
             }
         } label: {
-            Label("添加应用", systemImage: "plus")
+            Label(L10n.tr("settings.addApp"), systemImage: "plus")
         }
     }
 }

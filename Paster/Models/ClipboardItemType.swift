@@ -13,11 +13,11 @@ enum ClipboardItemType: String, Codable, CaseIterable {
     /// 中文展示名称，用于卡片上的类型标签。
     var displayName: String {
         switch self {
-        case .text: return "文本"
-        case .richText: return "富文本"
-        case .image: return "图片"
-        case .file: return "文件"
-        case .url: return "链接"
+        case .text:     return L10n.tr("type.text")
+        case .richText: return L10n.tr("type.richText")
+        case .image:    return L10n.tr("type.image")
+        case .file:     return L10n.tr("type.file")
+        case .url:      return L10n.tr("type.url")
         }
     }
 

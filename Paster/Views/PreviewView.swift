@@ -24,7 +24,7 @@ struct PreviewView: View {
             Image(nsImage: AppIconProvider.shared.icon(forBundleID: item.sourceBundleID))
                 .resizable()
                 .frame(width: 18, height: 18)
-            Text(item.sourceAppName ?? "未知来源")
+            Text(item.sourceAppName ?? L10n.tr("preview.unknownSource"))
                 .foregroundStyle(.secondary)
             Spacer()
             Label(item.type.displayName, systemImage: item.type.symbolName)
@@ -44,7 +44,7 @@ struct PreviewView: View {
             imagePreview
         default:
             ScrollView {
-                Text(item.previewText.isEmpty ? "（空内容）" : item.previewText)
+                Text(item.previewText.isEmpty ? L10n.tr("preview.emptyContent") : item.previewText)
                     .font(.system(size: 14))
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -64,7 +64,7 @@ struct PreviewView: View {
                     .padding(16)
             }
         } else {
-            ContentUnavailableView("无法预览图片", systemImage: "photo")
+            ContentUnavailableView(L10n.tr("preview.imageFailed"), systemImage: "photo")
         }
     }
 }

@@ -13,12 +13,12 @@ enum PanelPosition: String, CaseIterable, Identifiable, Codable {
 
     var displayName: String {
         switch self {
-        case .cursor: return "跟随光标（悬浮）"
-        case .bottom: return "屏幕底部"
-        case .top:    return "屏幕顶部"
-        case .left:   return "屏幕左侧"
-        case .right:  return "屏幕右侧"
-        case .center: return "屏幕中央"
+        case .cursor: return L10n.tr("position.cursor")
+        case .bottom: return L10n.tr("position.bottom")
+        case .top:    return L10n.tr("position.top")
+        case .left:   return L10n.tr("position.left")
+        case .right:  return L10n.tr("position.right")
+        case .center: return L10n.tr("position.center")
         }
     }
 }

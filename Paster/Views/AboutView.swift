@@ -3,6 +3,7 @@ import AppKit
 
 /// 关于页（第 6 轮新增）：应用简介 + 赞赏码（微信 / 支付宝 / PayPal）。
 struct AboutView: View {
+    @ObservedObject private var settings = AppSettings.shared
     private let payPalURL = URL(string: "https://www.paypal.com/paypalme/yinxu0619")!
 
     private var appVersion: String {
@@ -23,6 +24,7 @@ struct AboutView: View {
             .padding(20)
             .frame(maxWidth: .infinity)
         }
+        .id(settings.appLanguage)
     }
 
     // MARK: - 头部
@@ -46,10 +48,9 @@ struct AboutView: View {
 
     private var intro: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("简介")
+            Text(L10n.tr("about.intro"))
                 .font(.headline)
-            Text("Paster 是一款 macOS 原生剪贴板管理工具：后台自动记录文本、富文本、图片、文件与链接，"
-                 + "支持全局热键呼出、搜索筛选、固定置顶与多模式粘贴。数据 100% 本地存储，不联网、不上传。")
+            Text(L10n.tr("about.description"))
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -61,21 +62,21 @@ struct AboutView: View {
 
     private var donate: some View {
         VStack(spacing: 12) {
-            Text("如果觉得好用，欢迎请作者喝杯咖啡 ☕️")
+            Text(L10n.tr("about.donate"))
                 .font(.callout)
                 .foregroundStyle(.secondary)
 
             HStack(alignment: .top, spacing: 20) {
-                qrColumn(title: "微信支付", imageName: "donate_wechat", tint: .green)
-                qrColumn(title: "支付宝", imageName: "donate_alipay", tint: .blue)
+                qrColumn(title: L10n.tr("about.wechat"), imageName: "donate_wechat", tint: .green)
+                qrColumn(title: L10n.tr("about.alipay"), imageName: "donate_alipay", tint: .blue)
             }
 
             Link(destination: payPalURL) {
-                Label("使用 PayPal 支持", systemImage: "link")
+                Label(L10n.tr("about.paypal"), systemImage: "link")
             }
             .font(.callout)
 
-            Text("感谢你的支持！")
+            Text(L10n.tr("about.thanks"))
                 .font(.caption)
                 .foregroundStyle(.tertiary)
         }
