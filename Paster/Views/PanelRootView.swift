@@ -67,6 +67,58 @@ final class WheelSelector: ObservableObject {
     }
 }
 
+/// 在面板上拦截删除键以删除选中记录。
+///
+/// 搜索框默认聚焦时，SwiftUI 的 `TextField` 会优先消费退格 / 删除键，导致
+/// 挂在文本框上的 `.onKeyPress` 收不到事件。这里用与 `WheelSelector` 相同的
+/// `.keyDown` 本地监听，直接在 `FloatingPanel` 层拦截，绕开文本框的吞键。
+@MainActor
+final class KeyboardSelector: ObservableObject {
+    private var monitor: Any?
+
+    /// 搜索框是否为空（退格键仅在为空时用于删除记录，否则交还文本框编辑）。
+    var searchEmpty: Bool = true
+    /// 当前是否有选中项。
+    var hasSelection: Bool = false
+    /// 删除当前选中项的回调。
+    var onDelete: (() -> Void)?
+
+    func start() {
+        guard monitor == nil else { return }
+        monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self else { return event }
+            // 只处理悬浮面板上的按键，避免误吞设置等其它窗口的键盘事件。
+            guard event.window is FloatingPanel else { return event }
+
+            // 仅响应不带修饰键的删除键（⌘⌫ 等组合仍由原有逻辑处理）。
+            let mods = event.modifierFlags.intersection([.command, .option, .control, .shift])
+            guard mods.isEmpty else { return event }
+
+            switch event.keyCode {
+            case 117:  // 前向删除（Del / fn+Delete）：直接删除选中项。
+                guard self.hasSelection else { return event }
+                self.onDelete?()
+                return nil
+            case 51:   // 退格（Delete）：搜索框为空时删除选中项，否则留给文本框编辑。
+                guard self.searchEmpty, self.hasSelection else { return event }
+                self.onDelete?()
+                return nil
+            default:
+                return event
+            }
+        }
+    }
+
+    func stop() {
+        if let monitor { NSEvent.removeMonitor(monitor) }
+        monitor = nil
+    }
+
+    deinit {
+        if let monitor { NSEvent.removeMonitor(monitor) }
+    }
+}
+
 /// 面板布局形态。
 /// - `vertical`：跟随光标 / 屏幕侧边的竖向卡片列表（默认）。
 /// - `bar`：停靠屏幕上/下边缘的全宽横向平铺条（类似 Paste，扫读效率更高）。
@@ -96,6 +148,8 @@ struct PanelRootView: View {
     @FocusState private var searchFocused: Bool
     /// 横向条滚轮选择器。
     @StateObject private var wheel = WheelSelector()
+    /// 删除键拦截器（绕开搜索框对退格 / 删除键的吞键）。
+    @StateObject private var keyboard = KeyboardSelector()
 
     /// 面板可用操作集合，由 `AppDelegate` 注入。
     let actions: PanelActions
@@ -113,12 +167,16 @@ struct PanelRootView: View {
         .background(.ultraThinMaterial)
         .clipShape(RoundedRectangle(cornerRadius: layout == .bar ? 16 : 12, style: .continuous))
         .onAppear { onPanelAppear() }
-        .onDisappear { wheel.stop() }
+        .onDisappear { wheel.stop(); keyboard.stop() }
         .onChange(of: orderedVisible.map(\.persistentModelID)) { _, _ in
             selectDefaultIfNeeded()
             syncWheel()
         }
-        .onChange(of: selectedID) { _, id in wheel.current = id }
+        .onChange(of: selectedID) { _, id in
+            wheel.current = id
+            keyboard.hasSelection = (id != nil)
+        }
+        .onChange(of: searchText) { _, text in keyboard.searchEmpty = text.isEmpty }
         .id(settings.appLanguage)
     }
 
@@ -463,6 +521,11 @@ struct PanelRootView: View {
         wheel.onSelect = { id in selectedID = id }
         syncWheel()
         if layout == .bar { wheel.start() }
+        // 删除键拦截：搜索框聚焦时也能用 Del / 退格删除选中记录。
+        keyboard.onDelete = { if let item = selectedItem { deleteAndAdvance(item) } }
+        keyboard.searchEmpty = searchText.isEmpty
+        keyboard.hasSelection = (selectedItem != nil)
+        keyboard.start()
         // 呼出后自动聚焦搜索框。
         DispatchQueue.main.async { searchFocused = true }
     }
