@@ -2,7 +2,7 @@ import SwiftUI
 
 /// 顶部搜索栏：实时关键词搜索 + 来源应用筛选。
 ///
-/// 第 3 轮新增。键盘事件（↑↓ 选择、回车粘贴、⌘⌫ 删除、⌘P 固定）由外部
+/// 第 3 轮新增。键盘事件（↑↓ 选择、回车粘贴、Delete/⌘⌫ 删除、⌘P 固定）由外部
 /// 通过 `onKey` 回调统一处理，使搜索框聚焦时仍可进行列表导航。
 struct SearchBarView: View {
     @Binding var searchText: String

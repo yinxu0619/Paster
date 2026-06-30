@@ -18,6 +18,12 @@ A native macOS clipboard history manager. Records clipboard content in the backg
 
 ## Screenshots
 
+**Demo** — horizontal bar in action (scroll, select, paste):
+
+<p align="center">
+  <img src="docs/screenshots/demo-horizontal-bar.gif" width="900" alt="Paster demo: horizontal bar clipboard panel">
+</p>
+
 **Horizontal bar** — full-width panel docked to the screen edge, with card previews, source app icons, and type tags:
 
 <p align="center">
@@ -134,7 +140,7 @@ touch build/Paster.app && killall Finder Dock
 | First / last item | `Home` / `End` |
 | Paste (keep formatting) | `Return` |
 | Paste plain text | `⌘⇧↩` (configurable in Settings) |
-| Delete selected | `⌘⌫` |
+| Delete selected | `Delete` / `⌘⌫` |
 | Pin / unpin | `⌘P` |
 | Full preview | `⌘Y` |
 | Open Settings | `⌘,` |

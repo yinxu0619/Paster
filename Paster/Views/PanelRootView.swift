@@ -394,6 +394,20 @@ struct PanelRootView: View {
                 return .handled
             }
             return .ignored
+        case .deleteForward:
+            // 外接键盘 Del / fn+Delete：直接删除选中项。
+            if let item = selectedItem {
+                deleteAndAdvance(item)
+                return .handled
+            }
+            return .ignored
+        case .delete where !keyPress.modifiers.contains(.command):
+            // 笔记本 Delete（退格）：搜索框为空时删除选中项，否则留给搜索框编辑。
+            if searchText.isEmpty, let item = selectedItem {
+                deleteAndAdvance(item)
+                return .handled
+            }
+            return .ignored
         default:
             break
         }

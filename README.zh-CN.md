@@ -18,6 +18,12 @@
 
 ## 截图
 
+**演示动图** — 横向平铺条实际操作（滚动、选择、粘贴）：
+
+<p align="center">
+  <img src="docs/screenshots/demo-horizontal-bar.gif" width="900" alt="Paster 演示：横向平铺条剪贴板面板">
+</p>
+
 **横向平铺条** — 停靠屏幕边缘的全宽面板，卡片展示预览、来源应用图标与类型标签：
 
 <p align="center">
@@ -134,7 +140,7 @@ touch build/Paster.app && killall Finder Dock
 | 跳到首 / 尾 | `Home` / `End` |
 | 粘贴选中项（保留格式） | `回车` |
 | 无格式粘贴 | `⌘⇧↩`（可在设置中切换） |
-| 删除选中项 | `⌘⌫` |
+| 删除选中项 | `Delete` / `⌘⌫` |
 | 固定 / 取消固定 | `⌘P` |
 | 全屏预览 | `⌘Y` |
 | 打开设置 | `⌘,` |
