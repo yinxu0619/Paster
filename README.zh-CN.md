@@ -16,6 +16,26 @@
 4. 在 **系统设置 → 隐私与安全性 → 辅助功能** 中授权 Paster（自动粘贴需要此权限）
 5. 应用以**菜单栏图标**常驻（无 Dock 图标），点击图标或按 `⌘⇧V` 呼出面板
 
+## 截图
+
+**横向平铺条** — 停靠屏幕边缘的全宽面板，卡片展示预览、来源应用图标与类型标签：
+
+<p align="center">
+  <img src="docs/screenshots/panel-horizontal-bar.png" width="900" alt="Paster 横向平铺条，展示剪贴板历史卡片">
+</p>
+
+**设置与悬浮面板** — 可自定义热键、呼出位置、无格式粘贴快捷键与历史上限：
+
+<p align="center">
+  <img src="docs/screenshots/settings-and-panel.png" width="700" alt="Paster 设置窗口与剪贴板面板">
+</p>
+
+**横向条高度预览** — 通过滑块调节横向条高度，并实时预览效果：
+
+<p align="center">
+  <img src="docs/screenshots/settings-bar-height.png" width="500" alt="Paster 横向条高度设置与可视化预览">
+</p>
+
 ## 功能特性
 
 - **剪贴板历史持久化**：后台监听系统剪贴板，自动记录纯文本、富文本、图片、文件路径、URL；每条附带类型标签、时间戳、来源应用名称与图标；数据 100% 本地（SwiftData），不联网、不上传。

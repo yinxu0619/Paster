@@ -16,6 +16,26 @@ A native macOS clipboard history manager. Records clipboard content in the backg
 4. Grant **Accessibility** permission (System Settings → Privacy & Security → Accessibility) for auto-paste
 5. Paster lives in the **menu bar** (no Dock icon). Click the icon or press `⌘⇧V` to open the panel
 
+## Screenshots
+
+**Horizontal bar** — full-width panel docked to the screen edge, with card previews, source app icons, and type tags:
+
+<p align="center">
+  <img src="docs/screenshots/panel-horizontal-bar.png" width="900" alt="Paster horizontal bar panel showing clipboard history cards">
+</p>
+
+**Settings & floating panel** — customize hotkeys, panel position, plain-text paste shortcut, and history limit:
+
+<p align="center">
+  <img src="docs/screenshots/settings-and-panel.png" width="700" alt="Paster settings window alongside the clipboard panel">
+</p>
+
+**Bar height preview** — adjust the horizontal bar height with a live preview slider:
+
+<p align="center">
+  <img src="docs/screenshots/settings-bar-height.png" width="500" alt="Paster bar height setting with visual preview">
+</p>
+
 ## Features
 
 - **Persistent clipboard history**: Monitors the system clipboard in the background and records plain text, rich text, images, file paths, and URLs. Each entry includes type label, timestamp, and source app name + icon. Data stays 100% local (SwiftData) — no network, no uploads.
