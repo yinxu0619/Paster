@@ -1,135 +1,145 @@
-# Paster — macOS 原生剪贴板管理工具
+# Paster — Native macOS Clipboard Manager
 
-[English README](README.en.md)
+[中文 README](README.zh-CN.md)
 
-一款 macOS 原生剪贴板历史工具。后台实时记录剪贴板，全局热键呼出面板，支持文本 / 富文本 / 图片 / 文件 / 链接，本地存储、不联网。
+A native macOS clipboard history manager. Records clipboard content in the background, opens a panel with a global hotkey, supports text / rich text / images / files / URLs, with local-only storage and no network access.
 
-> 本工程通过多轮增量迭代完成 V1.0（macOS 端），代码全部基于上一轮成果扩展，未推翻重写。
+> This project was built through multiple incremental iterations to deliver V1.0 (macOS). All code extends prior work without rewriting core logic.
 
-## 功能特性
+## Download
 
-- **剪贴板历史持久化**：后台监听系统剪贴板，自动记录纯文本、富文本、图片、文件路径、URL；每条附带类型标签、时间戳、来源应用名称与图标；数据 100% 本地（SwiftData），不联网、不上传。
-- **全局热键呼出**：默认 `⌘⇧V`，任意应用内呼出面板；**可在设置中自定义热键**；失焦自动隐藏，`Esc` 或再次按热键关闭。
-- **呼出位置可选**：跟随光标悬浮、屏幕底部 / 顶部 / 左侧 / 右侧 / 中央，均带从对应边缘滑入的动画。
-  - 选「底部 / 顶部」时为**全宽横向平铺条**，从屏幕边缘升起；横向条高度可通过**设置里的滑块（带可视化预览）**或**直接拖拽面板上边缘**调整，卡片内容随高度自适应放大；横向条内可用**鼠标滚轮 / 触控板左右切换选中项**。
-  - 选「左侧 / 右侧」时为**占满屏幕高度的竖向侧栏**。
-- **多模式粘贴**：保留原格式粘贴、纯文本粘贴（剥离格式）、重新复制；卡片右键菜单与键盘操作；**无格式粘贴快捷键可在设置中切换**（默认 `⌘⇧↩`）。
-- **搜索与分类**：顶部实时关键词搜索、来源应用筛选；Pin 固定独立分组（Pinboard）置顶。
-- **键盘全操作**：`↑↓`（横向条为 `←→`）选择、`Home`/`End` 跳到首/尾、回车粘贴、`⌘⇧↩` 无格式粘贴、`⌘⌫` 删除、`⌘P` 固定、`⌘Y` 全屏预览、`Esc` 关闭，呼出后搜索框自动聚焦。
-- **隐私与配置**：排除应用列表（敏感应用不记录）、历史留存数量上限、一键清空、开机自启、菜单栏常驻。
-- **体验**：卡片式布局、图片缩略图、悬停 / 选中动效、呼出滑入 / 升起动画、深色 / 浅色与多屏适配。
-- **关于页**：应用简介与赞赏码（微信 / 支付宝 / PayPal）。
-- **多语言**：简体中文 / English，可在设置中切换或跟随系统语言。
+**macOS 14.0+** — get the latest pre-built app from [Releases](https://github.com/yinxu0619/Paster/releases/latest):
 
-## 技术栈
+1. Download `Paster.zip` and unzip
+2. Drag `Paster.app` to Applications
+3. If macOS blocks the app on first launch: `xattr -d com.apple.quarantine /Applications/Paster.app`
+4. Grant **Accessibility** permission (System Settings → Privacy & Security → Accessibility) for auto-paste
+5. Paster lives in the **menu bar** (no Dock icon). Click the icon or press `⌘⇧V` to open the panel
 
-| 项 | 选型 |
+## Features
+
+- **Persistent clipboard history**: Monitors the system clipboard in the background and records plain text, rich text, images, file paths, and URLs. Each entry includes type label, timestamp, and source app name + icon. Data stays 100% local (SwiftData) — no network, no uploads.
+- **Global hotkey**: Default `⌘⇧V` to open the panel from any app; **customizable in Settings**; auto-hides on focus loss; close with `Esc` or the hotkey again.
+- **Configurable panel position**: Follow cursor (floating), bottom / top / left / right / center of screen, each with slide-in animation from the corresponding edge.
+  - **Bottom / Top**: Full-width horizontal bar rising from the screen edge; bar height adjustable via **Settings slider (with preview)** or **drag the top edge** after opening; cards scale with height; **mouse wheel / trackpad** navigates selection horizontally.
+  - **Left / Right**: Full-height vertical sidebar.
+- **Multiple paste modes**: Paste with formatting, paste as plain text, copy again; context menu and keyboard shortcuts; **plain-text paste shortcut configurable in Settings** (default `⌘⇧↩`).
+- **Search & organization**: Real-time keyword search and source app filter; pinned items in a separate Pinboard group at the top.
+- **Full keyboard control**: `↑↓` (horizontal bar: `←→`) to select, `Home`/`End` for first/last, Return to paste, `⌘⇧↩` for plain text, `⌘⌫` to delete, `⌘P` to pin, `⌘Y` for full preview, `Esc` to close; search field auto-focused on open.
+- **Privacy & settings**: Excluded apps list (sensitive apps not recorded), history limit, clear all, launch at login, menu bar icon.
+- **Polish**: Card layout, image thumbnails, hover/selection effects, slide-in animations, dark/light mode and multi-display support.
+- **About page**: App info and donation QR codes (WeChat / Alipay / PayPal).
+- **Localization**: Simplified Chinese / English — switch in Settings or follow system language.
+
+## Tech Stack
+
+| Item | Choice |
 | --- | --- |
-| 语言 | Swift 5+ |
-| UI | SwiftUI 为主，AppKit 辅助（全局热键、剪贴板监听、状态栏、NSPanel） |
-| 存储 | SwiftData（本地） |
-| 架构 | MVVM 分层 |
-| 最低系统 | macOS 14.0 |
+| Language | Swift 5+ |
+| UI | SwiftUI + AppKit (global hotkeys, clipboard monitoring, menu bar, NSPanel) |
+| Storage | SwiftData (local) |
+| Architecture | MVVM |
+| Minimum OS | macOS 14.0 |
 
-## 工程结构
+## Project Structure
 
 ```
 Paster/
-  App/         PasterApp.swift（入口）, AppDelegate.swift（状态栏/热键/面板/预览/设置）
-  Models/      ClipboardItem.swift（@Model）, ClipboardItemType.swift, PanelPosition.swift,
+  App/         PasterApp.swift (entry), AppDelegate.swift (menu bar / hotkeys / panel / preview / settings)
+  Models/      ClipboardItem.swift (@Model), ClipboardItemType.swift, PanelPosition.swift,
                PlainPasteShortcut.swift, AppLanguage.swift
   Services/    PersistenceManager.swift, ClipboardMonitor.swift, HotKeyManager.swift,
                PasteService.swift, AppSettings.swift
   ViewModels/  ClipboardViewModel.swift, SettingsViewModel.swift
   Views/       PanelRootView.swift, ClipboardCardView.swift, SearchBarView.swift,
                SettingsView.swift, PreviewView.swift, AboutView.swift, HotKeyRecorder.swift
-  Window/      FloatingPanel.swift（NSPanel）
+  Window/      FloatingPanel.swift (NSPanel)
   Utilities/   ImageUtils.swift, AppIconProvider.swift, KeyCodeTranslator.swift,
                Localization.swift
-  Resources/   Assets.xcassets, Paster.entitlements, Paster.icns, Donate/（赞赏码）,
-               zh-Hans.lproj/ en.lproj/（本地化）
-scripts/       build_check.sh（编译/类型检查校验）, build_app.sh（手动打包 .app）,
-               make_icon.swift / make_icns.swift（图标生成）
+  Resources/   Assets.xcassets, Paster.entitlements, Paster.icns, Donate/ (QR codes),
+               zh-Hans.lproj/ en.lproj/ (localization)
+scripts/       build_check.sh (compile/type-check), build_app.sh (manual .app packaging),
+               make_icon.swift / make_icns.swift (icon generation)
 ```
 
-## 数据流
+## Data Flow
 
 ```
-NSPasteboard --changeCount 轮询--> ClipboardMonitor --写入--> SwiftData
+NSPasteboard --changeCount poll--> ClipboardMonitor --write--> SwiftData
                                                               |
-HotKey(⌘⇧V) --呼出--> FloatingPanel --PanelRootView(@Query)<--+
+HotKey(⌘⇧V) --open--> FloatingPanel --PanelRootView(@Query)<--+
                                           |
-                       回车/双击 --> 隐藏面板 -> 激活目标应用 -> PasteService 模拟 ⌘V
+                       Return/double-click --> hide panel -> activate target app -> PasteService simulates ⌘V
 ```
 
-## 编译与运行
+## Build & Run
 
-环境：macOS 14.0+，Xcode 16+。
+Requirements: macOS 14.0+, Xcode 16+.
 
-1. 双击打开 `Paster.xcodeproj`。
-2. 选择 `Paster` scheme，`⌘R` 运行。
-3. 首次运行需授权：
-   - **辅助功能**（系统设置 → 隐私与安全性 → 辅助功能）：用于模拟 `⌘V` 粘贴。
-   - 应用以菜单栏图标常驻（无 Dock 图标），点击图标或按 `⌘⇧V` 呼出面板。
+1. Open `Paster.xcodeproj`.
+2. Select the `Paster` scheme, press `⌘R` to run.
+3. First launch permissions:
+   - **Accessibility** (System Settings → Privacy & Security → Accessibility): required to simulate `⌘V` paste.
+   - The app lives in the menu bar (no Dock icon). Click the icon or press `⌘⇧V` to open the panel.
 
-> 注意：每次重新打包（ad-hoc 签名会变化）后，系统可能要求**重新授权辅助功能**。若列表里已有旧的 Paster，请先移除再重新添加新的一份，否则模拟 `⌘V` 会被系统静默忽略（表现为只替换了剪贴板但没粘贴进去）。
+> Note: Each rebuild (ad-hoc signing changes) may require **re-granting Accessibility**. If an old Paster entry exists in the list, remove it and add the new build again — otherwise simulated `⌘V` is silently ignored (clipboard updates but paste does not happen).
 
-### 命令行校验
+### Command-line verification
 
 ```bash
 bash scripts/build_check.sh
 ```
 
-脚本优先调用 `xcodebuild` 完整构建；若当前机器的 Xcode 命令行工具异常（插件 / 私有框架损坏），自动回退到带 SwiftData 宏插件的 `swiftc -typecheck`，对全部源码做完整类型检查（含宏展开）。
+The script tries `xcodebuild` first; if Xcode CLI tools are broken on the machine, it falls back to `swiftc -typecheck` with SwiftData macro plugins for full type checking.
 
-### 打包为 .app
+### Package as .app
 
 ```bash
 bash scripts/build_app.sh
 ```
 
-直接用 `swiftc` 编译全部源码、组装 `build/Paster.app`（嵌入图标与赞赏码、ad-hoc 签名）并产出 `build/Paster.zip`。若图标在 Finder 未刷新，执行：
+Compiles all sources with `swiftc`, assembles `build/Paster.app` (icons, donation QR codes, localization, ad-hoc signing) and `build/Paster.zip`. If the icon does not refresh in Finder:
 
 ```bash
 touch build/Paster.app && killall Finder Dock
 ```
 
-## 快捷键
+## Shortcuts
 
-| 操作 | 快捷键 |
+| Action | Shortcut |
 | --- | --- |
-| 呼出 / 隐藏面板 | `⌘⇧V`（可自定义） |
-| 关闭面板 | `Esc` |
-| 选择 | `↑` / `↓`（横向条 `←` / `→`，或鼠标滚轮 / 触控板） |
-| 跳到首 / 尾 | `Home` / `End` |
-| 粘贴选中项（保留格式） | `回车` |
-| 无格式粘贴 | `⌘⇧↩`（可在设置中切换） |
-| 删除选中项 | `⌘⌫` |
-| 固定 / 取消固定 | `⌘P` |
-| 全屏预览 | `⌘Y` |
-| 打开设置 | `⌘,` |
+| Open / hide panel | `⌘⇧V` (customizable) |
+| Close panel | `Esc` |
+| Select | `↑` / `↓` (horizontal bar: `←` / `→`, or mouse wheel / trackpad) |
+| First / last item | `Home` / `End` |
+| Paste (keep formatting) | `Return` |
+| Paste plain text | `⌘⇧↩` (configurable in Settings) |
+| Delete selected | `⌘⌫` |
+| Pin / unpin | `⌘P` |
+| Full preview | `⌘Y` |
+| Open Settings | `⌘,` |
 
-## 隐私说明
+## Privacy
 
-所有剪贴板数据仅保存在本机 SwiftData 存储中，应用不发起任何网络请求。可在设置中将密码管理器等敏感应用加入排除列表，其复制内容不会被记录。
+All clipboard data is stored locally in SwiftData. The app makes no network requests. Add password managers and other sensitive apps to the excluded list in Settings — their clipboard content will not be recorded.
 
-## 赞赏支持
+## Support the Author
 
-如果觉得好用，欢迎请作者喝杯咖啡 ☕️
+If you find Paster useful, consider buying the author a coffee ☕️
 
 <table>
   <tr>
-    <td align="center"><img src="Paster/Resources/Donate/donate_wechat.png" width="220" alt="微信支付"><br/>微信支付</td>
-    <td align="center"><img src="Paster/Resources/Donate/donate_alipay.png" width="220" alt="支付宝"><br/>支付宝</td>
+    <td align="center"><img src="Paster/Resources/Donate/donate_wechat.png" width="220" alt="WeChat Pay"><br/>WeChat Pay</td>
+    <td align="center"><img src="Paster/Resources/Donate/donate_alipay.png" width="220" alt="Alipay"><br/>Alipay</td>
   </tr>
 </table>
 
-或通过 [PayPal](https://www.paypal.com/paypalme/yinxu0619) 支持。
+Or support via [PayPal](https://www.paypal.com/paypalme/yinxu0619).
 
-## 路线图
+## Roadmap
 
-- V1.0（本仓库）：macOS 原生版。
-- V2.0（规划中）：Windows 11 版（WinUI 3 + C#），对齐 macOS 端核心功能与交互。
+- V1.0 (this repo): Native macOS version.
+- V2.0 (planned): Windows 11 (WinUI 3 + C#), aligned with macOS core features and interaction.
 
 ## License
 
