@@ -25,6 +25,8 @@
 "settings.barHeight" = "Bar Height";
 "settings.barHeightUnit" = "%d pt";
 "settings.barHeightHint" = "The bar spans the screen width. You can also drag the top edge after opening the panel.";
+"settings.barAttachEdge" = "Attach to Screen Edge";
+"settings.barAttachEdgeHint" = "When on, the bar sticks to the very edge of the screen (over the Dock / menu bar). When off, it docks within the usable area (bottom sits above the Dock).";
 "settings.history" = "History";
 "settings.historyLimit" = "History limit";
 "settings.historyLimitCount" = "%d items";

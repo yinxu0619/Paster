@@ -140,6 +140,9 @@ struct PanelRootView: View {
 
     /// 选中项（用于键盘导航与回车粘贴）。
     @State private var selectedID: PersistentIdentifier?
+    /// 需要滚动到可见位置的目标项。仅在键盘 / 滚轮导航时设置，鼠标点选不触发，
+    /// 避免点右侧卡片时视图自动把它滚到居中。
+    @State private var scrollTargetID: PersistentIdentifier?
     /// 搜索关键词。
     @State private var searchText: String = ""
     /// 来源应用筛选（nil 表示全部）。
@@ -167,7 +170,9 @@ struct PanelRootView: View {
         .background(.ultraThinMaterial)
         .clipShape(RoundedRectangle(cornerRadius: layout == .bar ? 16 : 12, style: .continuous))
         .onAppear { onPanelAppear() }
-        .onDisappear { wheel.stop(); keyboard.stop() }
+        // 不在 onDisappear 里停监听：面板内容会被复用，隐藏/再呼出时 onAppear 未必重新触发，
+        // 停了就再也起不来（滚轮失效）。监听器已按 `event.window is FloatingPanel` 过滤，
+        // 常驻不会影响其它窗口；视图真正销毁时由各自 deinit 统一清理。
         .onChange(of: orderedVisible.map(\.persistentModelID)) { _, _ in
             selectDefaultIfNeeded()
             syncWheel()
@@ -177,6 +182,9 @@ struct PanelRootView: View {
             keyboard.hasSelection = (id != nil)
         }
         .onChange(of: searchText) { _, text in keyboard.searchEmpty = text.isEmpty }
+        .onReceive(NotificationCenter.default.publisher(for: AppDelegate.panelWillShowNotification)) { _ in
+            prepareForShow()
+        }
         .id(settings.appLanguage)
     }
 
@@ -248,7 +256,7 @@ struct PanelRootView: View {
                 .padding(.horizontal, 14)
                 .padding(.vertical, 12)
             }
-            .onChange(of: selectedID) { _, id in
+            .onChange(of: scrollTargetID) { _, id in
                 guard let id else { return }
                 withAnimation(.easeInOut(duration: 0.12)) {
                     proxy.scrollTo(id, anchor: .center)
@@ -263,8 +271,9 @@ struct PanelRootView: View {
             .frame(maxHeight: .infinity)
             .id(item.persistentModelID)
             .contentShape(Rectangle())
+            // 单击用 simultaneousGesture 即时选中，避免与双击互斥时被延迟约 0.3s。
             .onTapGesture(count: 2) { actions.paste(item) }
-            .onTapGesture { selectedID = item.persistentModelID }
+            .simultaneousGesture(TapGesture(count: 1).onEnded { selectedID = item.persistentModelID })
             .contextMenu { contextMenu(for: item) }
     }
 
@@ -333,7 +342,7 @@ struct PanelRootView: View {
                 }
                 .padding(10)
             }
-            .onChange(of: selectedID) { _, id in
+            .onChange(of: scrollTargetID) { _, id in
                 guard let id else { return }
                 withAnimation(.easeInOut(duration: 0.12)) {
                     proxy.scrollTo(id, anchor: .center)
@@ -358,8 +367,9 @@ struct PanelRootView: View {
         ClipboardCardView(item: item, isSelected: selectedID == item.persistentModelID)
             .id(item.persistentModelID)
             .contentShape(Rectangle())
+            // 单击用 simultaneousGesture 即时选中，避免与双击互斥时被延迟约 0.3s。
             .onTapGesture(count: 2) { actions.paste(item) }
-            .onTapGesture { selectedID = item.persistentModelID }
+            .simultaneousGesture(TapGesture(count: 1).onEnded { selectedID = item.persistentModelID })
             .contextMenu { contextMenu(for: item) }
     }
 
@@ -428,10 +438,10 @@ struct PanelRootView: View {
             actions.dismiss()
             return .handled
         case .home:
-            if let first = orderedVisible.first?.persistentModelID { selectedID = first }
+            if let first = orderedVisible.first?.persistentModelID { selectAndScroll(first) }
             return .handled
         case .end:
-            if let last = orderedVisible.last?.persistentModelID { selectedID = last }
+            if let last = orderedVisible.last?.persistentModelID { selectAndScroll(last) }
             return .handled
         case .upArrow:
             moveSelection(by: -1)
@@ -493,10 +503,16 @@ struct PanelRootView: View {
         guard !ids.isEmpty else { return }
         if let selectedID, let index = ids.firstIndex(of: selectedID) {
             let next = max(0, min(ids.count - 1, index + delta))
-            self.selectedID = ids[next]
+            selectAndScroll(ids[next])
         } else {
-            selectedID = delta >= 0 ? ids.first : ids.last
+            selectAndScroll(delta >= 0 ? ids.first : ids.last)
         }
+    }
+
+    /// 选中并滚动到目标项（用于键盘 / 滚轮导航；鼠标点选不走这里，故不会自动居中）。
+    private func selectAndScroll(_ id: PersistentIdentifier?) {
+        selectedID = id
+        scrollTargetID = id
     }
 
     private func deleteAndAdvance(_ item: ClipboardItem) {
@@ -516,18 +532,30 @@ struct PanelRootView: View {
     // MARK: - 生命周期
 
     private func onPanelAppear() {
-        selectDefaultIfNeeded()
-        // 横向条模式下启用鼠标滚轮左右选择。
-        wheel.onSelect = { id in selectedID = id }
-        syncWheel()
-        if layout == .bar { wheel.start() }
+        prepareForShow()
+    }
+
+    /// 每次呼出时的准备：重置搜索与选中、聚焦搜索框，并确保监听已启动。
+    ///
+    /// 内容视图被复用（未重建）时 `onAppear` 不会再次触发，因此呼出时统一走这里，
+    /// 保证复用与重建两种路径下行为一致；回调也在此赋值，避免预建控制器时尚未设置。
+    private func prepareForShow() {
+        // 横向条模式下启用鼠标滚轮左右选择（滚轮导航需要滚动到可见位置）。
+        wheel.onSelect = { id in selectAndScroll(id) }
         // 删除键拦截：搜索框聚焦时也能用 Del / 退格删除选中记录。
         keyboard.onDelete = { if let item = selectedItem { deleteAndAdvance(item) } }
-        keyboard.searchEmpty = searchText.isEmpty
-        keyboard.hasSelection = (selectedItem != nil)
+
+        searchText = ""
+        if layout == .bar { wheel.start() }
         keyboard.start()
-        // 呼出后自动聚焦搜索框。
-        DispatchQueue.main.async { searchFocused = true }
+        // 清空搜索后于下一轮 runloop 读取最新列表，选中首项并聚焦搜索框。
+        DispatchQueue.main.async {
+            selectAndScroll(orderedVisible.first?.persistentModelID)
+            syncWheel()
+            keyboard.searchEmpty = searchText.isEmpty
+            keyboard.hasSelection = (selectedItem != nil)
+            searchFocused = true
+        }
     }
 
     /// 同步滚轮选择器的候选列表与当前选中项。

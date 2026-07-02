@@ -25,6 +25,7 @@ final class AppSettings: ObservableObject {
         static let hotKeyModifiers = "hotKeyModifiers"
         static let panelPosition = "panelPosition"
         static let barHeight = "barHeight"
+        static let barAttachToScreenEdge = "barAttachToScreenEdge"
         static let plainPasteShortcut = "plainPasteShortcut"
         static let appLanguage = "appLanguage"
     }
@@ -82,6 +83,13 @@ final class AppSettings: ObservableObject {
         }
     }
 
+    /// 横向平铺条（底部/顶部）是否停靠到真实屏幕边缘。
+    /// - `true`：贴到屏幕最外沿（覆盖 Dock / 菜单栏区域）。
+    /// - `false`（默认）：停靠在可用区域内，底部位于 Dock 之上、顶部位于菜单栏之下。
+    @Published var barAttachToScreenEdge: Bool {
+        didSet { defaults.set(barAttachToScreenEdge, forKey: Keys.barAttachToScreenEdge) }
+    }
+
     /// 面板内「无格式粘贴」的快捷键（与回车组合）。
     @Published var plainPasteShortcut: PlainPasteShortcut {
         didSet { defaults.set(plainPasteShortcut.rawValue, forKey: Keys.plainPasteShortcut) }
@@ -103,6 +111,7 @@ final class AppSettings: ObservableObject {
         hotKeyModifiers = UInt32(defaults.object(forKey: Keys.hotKeyModifiers) as? Int ?? Int(Self.defaultHotKeyModifiers))
         panelPosition = PanelPosition(rawValue: defaults.string(forKey: Keys.panelPosition) ?? "") ?? .cursor
         barHeight = defaults.object(forKey: Keys.barHeight) as? Double ?? 240
+        barAttachToScreenEdge = defaults.bool(forKey: Keys.barAttachToScreenEdge)
         plainPasteShortcut = PlainPasteShortcut(rawValue: defaults.string(forKey: Keys.plainPasteShortcut) ?? "") ?? .commandShift
         appLanguage = AppLanguage(rawValue: defaults.string(forKey: Keys.appLanguage) ?? "") ?? .system
     }

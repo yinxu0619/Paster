@@ -72,6 +72,11 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
 
                 if settings.panelPosition == .bottom || settings.panelPosition == .top {
+                    Toggle(L10n.tr("settings.barAttachEdge"), isOn: $settings.barAttachToScreenEdge)
+                    Text(L10n.tr("settings.barAttachEdgeHint"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
                     VStack(alignment: .leading, spacing: 6) {
                         HStack {
                             Text(L10n.tr("settings.barHeight"))

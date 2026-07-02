@@ -25,6 +25,8 @@
 "settings.barHeight" = "横向条高度";
 "settings.barHeightUnit" = "%d pt";
 "settings.barHeightHint" = "横向条铺满屏幕宽度；也可在呼出后直接拖拽面板上边缘调整高度。";
+"settings.barAttachEdge" = "贴到屏幕边缘";
+"settings.barAttachEdgeHint" = "开启后横向条紧贴屏幕最外沿（覆盖 Dock / 菜单栏区域）；关闭则停靠在可用区域内（底部位于 Dock 之上）。";
 "settings.history" = "历史";
 "settings.historyLimit" = "历史留存数量上限";
 "settings.historyLimitCount" = "%d 条";

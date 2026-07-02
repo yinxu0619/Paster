@@ -12,9 +12,10 @@ let dir = CommandLine.arguments[1]
 let outPath = CommandLine.arguments[2]
 
 // OSType -> 对应 PNG 像素尺寸（文件名 icon_<size>.png）
+// 注意：不要使用 icp4(16)/icp5(32) 承载 PNG —— 本机 macOS 对这两个槽位的
+// PNG 解码存在问题，会导致列表/侧栏里的小图标花屏。改由 ic11/ic12 等
+// 现代 PNG 槽位提供小尺寸，NSImage/Finder 会据此正确缩放渲染。
 let slots: [(type: String, size: Int)] = [
-    ("icp4", 16),   // 16x16
-    ("icp5", 32),   // 32x32
     ("ic11", 32),   // 16x16@2x
     ("ic12", 64),   // 32x32@2x
     ("ic07", 128),  // 128x128
