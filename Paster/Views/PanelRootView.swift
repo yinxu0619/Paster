@@ -9,6 +9,10 @@ final class WheelSelector: ObservableObject {
     /// 触控板精确滚动的累加器与阈值（避免一滑就跳很多项）。
     private var accumulated: CGFloat = 0
     private let preciseThreshold: CGFloat = 10
+    /// 鼠标滚轮离散步进的时间节流：一个物理刻度常连发多个事件，
+    /// 用最小间隔把「一圈」限制为一格，避免滚一下就窜过好几项。
+    private var lastMouseStepAt: TimeInterval = 0
+    private let mouseStepInterval: TimeInterval = 0.11
 
     var ids: [PersistentIdentifier] = []
     var current: PersistentIdentifier?
@@ -40,8 +44,12 @@ final class WheelSelector: ObservableObject {
                     accumulated = 0
                 }
             } else {
-                // 鼠标滚轮：每个刻度走一格。
-                self.step(delta < 0 ? 1 : -1)
+                // 鼠标滚轮：一个刻度常连发多个事件，用时间节流保证一次只走一格。
+                let now = ProcessInfo.processInfo.systemUptime
+                if now - lastMouseStepAt >= mouseStepInterval {
+                    lastMouseStepAt = now
+                    self.step(delta < 0 ? 1 : -1)
+                }
             }
             return nil
         }
@@ -375,13 +383,23 @@ struct PanelRootView: View {
 
     @ViewBuilder
     private func contextMenu(for item: ClipboardItem) -> some View {
+        // 各项右侧显示快捷键（与下方 handleKeyPress / KeyboardSelector 的选中态快捷键一致）。
+        // contextMenu 内容按需惰性构建，这里的 keyboardShortcut 仅作提示、且只在菜单打开时生效，
+        // 不会与列表里逐条卡片重复注册全局快捷键。
         Button(L10n.tr("menu.paste")) { actions.paste(item) }
+            .keyboardShortcut(.return, modifiers: [])
         Button(L10n.tr("menu.pastePlain")) { actions.pastePlain(item) }
+            .keyboardShortcut(.return, modifiers: settings.plainPasteShortcut.eventModifiers)
         Button(L10n.tr("menu.copy")) { actions.copy(item) }
-        Button(L10n.tr("menu.preview")) { actions.preview(item) }
+            .keyboardShortcut("c", modifiers: .command)
         Divider()
+        Button(L10n.tr("menu.preview")) { actions.preview(item) }
+            .keyboardShortcut("y", modifiers: .command)
         Button(item.isPinned ? L10n.tr("menu.unpin") : L10n.tr("menu.pin")) { actions.togglePin(item) }
+            .keyboardShortcut("p", modifiers: .command)
+        Divider()
         Button(L10n.tr("menu.delete"), role: .destructive) { actions.delete(item) }
+            .keyboardShortcut(.delete, modifiers: [])
     }
 
     // MARK: - 数据筛选与分组
@@ -486,6 +504,10 @@ struct PanelRootView: View {
                 deleteAndAdvance(item)
                 return .handled
             }
+            if keyPress.characters == "c", let item = selectedItem {
+                actions.copy(item)
+                return .handled
+            }
             if keyPress.characters == "p", let item = selectedItem {
                 actions.togglePin(item)
                 return .handled
@@ -546,11 +568,17 @@ struct PanelRootView: View {
         keyboard.onDelete = { if let item = selectedItem { deleteAndAdvance(item) } }
 
         searchText = ""
+        // 先清空滚动目标，确保随后设定选中项时必定触发一次滚动到位。
+        scrollTargetID = nil
         if layout == .bar { wheel.start() }
         keyboard.start()
-        // 清空搜索后于下一轮 runloop 读取最新列表，选中首项并聚焦搜索框。
+        // 下一轮 runloop 读取最新列表：保留上次的选中项（呼出之间不重置），
+        // 仅当该项已不存在（被删除 / 超出历史上限）时才回退到首项。
         DispatchQueue.main.async {
-            selectAndScroll(orderedVisible.first?.persistentModelID)
+            let keepsSelection = selectedID != nil
+                && orderedVisible.contains { $0.persistentModelID == selectedID }
+            let target = keepsSelection ? selectedID : orderedVisible.first?.persistentModelID
+            selectAndScroll(target)
             syncWheel()
             keyboard.searchEmpty = searchText.isEmpty
             keyboard.hasSelection = (selectedItem != nil)

@@ -175,6 +175,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.onCancel = { [weak self] in self?.hidePanel() }
         self.panel = panel
         configurePanelContent(panel)
+        prewarmPanel(panel)
+    }
+
+    /// 启动时离屏预渲染一次，提前付清 SwiftUI 首帧与毛玻璃材质的首次合成开销，
+    /// 使用户第一次按热键即可瞬间呼出（否则首帧渲染会造成可感知的卡顿）。
+    private func prewarmPanel(_ panel: FloatingPanel) {
+        panel.alphaValue = 0
+        panel.setFrameOrigin(NSPoint(x: -30_000, y: -30_000))
+        panel.orderFrontRegardless()
+        panel.contentView?.layoutSubtreeIfNeeded()
+        panel.displayIfNeeded()
+        panel.orderOut(nil)
+        panel.alphaValue = 1
     }
 
     /// 依据当前呼出位置设置面板尺寸与布局：上下边缘 → 全宽横向平铺条；其余 → 竖向卡片。
@@ -244,13 +257,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // 窗口直接定位到最终位置；滑入动画交给 GPU 加速的内容图层完成（比窗口 setFrame 更丝滑）。
         panel.setFrameOrigin(targetOrigin(for: panel))
         panel.alphaValue = 1
-        NSApp.activate(ignoringOtherApps: true)
+        // 先立即上屏并取得键盘焦点（非激活面板可在不切换前台应用的前提下成为 key window），
+        // 再补一次应用激活。顺序很关键：把较慢的 activate 放到上屏之后，避免它阻塞面板出现。
         panel.makeKeyAndOrderFront(nil)
 
         // 通知内容视图重置状态并聚焦搜索框（内容被复用、onAppear 不再触发时也生效）。
         NotificationCenter.default.post(name: Self.panelWillShowNotification, object: nil)
 
         animateEntrance(panel)
+        NSApp.activate(ignoringOtherApps: true)
     }
 
     /// 用 Core Animation 在内容图层上做「弹性位移 + 淡入」入场动画（GPU 加速，丝滑流畅，带果冻回弹）。
