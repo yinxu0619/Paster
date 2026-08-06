@@ -78,10 +78,29 @@ internal static partial class NativeMethods
         public InputUnion u;
     }
 
+    /// <summary>
+    /// All three variants must be declared even though only <see cref="ki"/> is used: SendInput
+    /// rejects the call unless cbSize equals the full native INPUT size, which is governed by the
+    /// largest union member (MOUSEINPUT). With only the keyboard member the struct is 32 bytes
+    /// instead of 40 and every call fails with ERROR_INVALID_PARAMETER.
+    /// </summary>
     [StructLayout(LayoutKind.Explicit)]
     public struct InputUnion
     {
+        [FieldOffset(0)] public MouseInput mi;
         [FieldOffset(0)] public KeyboardInput ki;
+        [FieldOffset(0)] public HardwareInput hi;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct MouseInput
+    {
+        public int dx;
+        public int dy;
+        public uint mouseData;
+        public uint dwFlags;
+        public uint time;
+        public IntPtr dwExtraInfo;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -92,6 +111,14 @@ internal static partial class NativeMethods
         public uint dwFlags;
         public uint time;
         public IntPtr dwExtraInfo;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct HardwareInput
+    {
+        public uint uMsg;
+        public ushort wParamL;
+        public ushort wParamH;
     }
 
     [StructLayout(LayoutKind.Sequential)]
