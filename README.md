@@ -1,20 +1,32 @@
-# Paster — Native macOS Clipboard Manager
+# Paster — Native Clipboard Manager for macOS and Windows
 
 [中文 README](README.zh-CN.md)
 
-A native macOS clipboard history manager. Records clipboard content in the background, opens a panel with a global hotkey, supports text / rich text / images / files / URLs, with local-only storage and no network access.
+A native clipboard history manager. Records clipboard content in the background, opens a panel with a global hotkey, supports text / rich text / images / files / URLs, with local-only storage and no network access.
 
-> This project was built through multiple incremental iterations to deliver V1.0 (macOS). All code extends prior work without rewriting core logic.
+Available as a native macOS app (Swift / SwiftUI) and a native Windows 11 app (C# / WinUI 3) that shares the same interaction model. See [`windows/README.md`](windows/README.md) for the Windows port.
+
+> This project was built through multiple incremental iterations: V1.x delivered and refined the macOS app, V2.0 added the native Windows 11 port. All code extends prior work without rewriting core logic.
 
 ## Download
 
-**macOS 14.0+** — get the latest pre-built app from [Releases](https://github.com/yinxu0619/Paster/releases/latest):
+Get the latest pre-built apps from [Releases](https://github.com/yinxu0619/Paster/releases/latest).
+
+### macOS 14.0+
 
 1. Download `Paster.zip` and unzip
 2. Drag `Paster.app` to Applications
 3. If macOS blocks the app on first launch: `xattr -d com.apple.quarantine /Applications/Paster.app`
 4. Grant **Accessibility** permission (System Settings → Privacy & Security → Accessibility) for auto-paste
 5. Paster lives in the **menu bar** (no Dock icon). Click the icon or press `⌘⇧V` to open the panel
+
+### Windows 11
+
+1. Download `Paster-Windows-x64.zip` and unzip the whole folder (keep the files together)
+2. Run `Paster.Windows.exe` — no installer, and the build is self-contained
+3. SmartScreen may warn because the binary is unsigned: choose **More info → Run anyway**
+4. Paster lives in the **system tray** (no taskbar entry). Press `Alt+C` to open the panel, or left-click the tray icon
+5. To quit, right-click the tray icon and choose **Quit Paster**
 
 ## Screenshots
 
@@ -59,6 +71,8 @@ A native macOS clipboard history manager. Records clipboard content in the backg
 
 ## Tech Stack
 
+macOS:
+
 | Item | Choice |
 | --- | --- |
 | Language | Swift 5+ |
@@ -66,6 +80,17 @@ A native macOS clipboard history manager. Records clipboard content in the backg
 | Storage | SwiftData (local) |
 | Architecture | MVVM |
 | Minimum OS | macOS 14.0 |
+
+Windows (see [`windows/README.md`](windows/README.md)):
+
+| Item | Choice |
+| --- | --- |
+| Language | C# / .NET 8 |
+| UI | WinUI 3 (Windows App SDK), unpackaged desktop app |
+| Native interop | `RegisterHotKey`, `AddClipboardFormatListener`, `Shell_NotifyIcon`, `SendInput` |
+| Storage | SQLite (local) |
+| Architecture | MVVM |
+| Minimum OS | Windows 11 (Windows 10 21H2 may work) |
 
 ## Project Structure
 
@@ -164,8 +189,8 @@ Or support via [PayPal](https://www.paypal.com/paypalme/yinxu0619).
 
 ## Roadmap
 
-- V1.0 (this repo): Native macOS version.
-- V2.0 (planned): Windows 11 (WinUI 3 + C#), aligned with macOS core features and interaction.
+- V1.0 – V1.2: Native macOS version (Swift / SwiftUI / SwiftData).
+- V2.0: Native Windows 11 version (C# / WinUI 3 / SQLite) under [`windows/`](windows/), aligned with the macOS core features and interaction.
 
 ## License
 

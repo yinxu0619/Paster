@@ -1,20 +1,32 @@
-# Paster — macOS 原生剪贴板管理工具
+# Paster — macOS / Windows 原生剪贴板管理工具
 
 [English README](README.md)
 
-一款 macOS 原生剪贴板历史工具。后台实时记录剪贴板，全局热键呼出面板，支持文本 / 富文本 / 图片 / 文件 / 链接，本地存储、不联网。
+一款原生剪贴板历史工具。后台实时记录剪贴板，全局热键呼出面板，支持文本 / 富文本 / 图片 / 文件 / 链接，本地存储、不联网。
 
-> 本工程通过多轮增量迭代完成 V1.0（macOS 端），代码全部基于上一轮成果扩展，未推翻重写。
+提供 macOS 原生版（Swift / SwiftUI）与 Windows 11 原生版（C# / WinUI 3），两端交互保持一致。Windows 端说明见 [`windows/README.md`](windows/README.md)。
+
+> 本工程通过多轮增量迭代完成：V1.x 为 macOS 端并持续打磨，V2.0 新增 Windows 11 原生端。代码全部基于上一轮成果扩展，未推翻重写。
 
 ## 下载
 
-**macOS 14.0+** — 可直接下载预编译版本：[最新 Release](https://github.com/yinxu0619/Paster/releases/latest)
+可直接下载预编译版本：[最新 Release](https://github.com/yinxu0619/Paster/releases/latest)
+
+### macOS 14.0+
 
 1. 下载 `Paster.zip` 并解压
 2. 将 `Paster.app` 拖入「应用程序」文件夹
 3. 首次打开若被系统拦截，在终端执行：`xattr -d com.apple.quarantine /Applications/Paster.app`
 4. 在 **系统设置 → 隐私与安全性 → 辅助功能** 中授权 Paster（自动粘贴需要此权限）
 5. 应用以**菜单栏图标**常驻（无 Dock 图标），点击图标或按 `⌘⇧V` 呼出面板
+
+### Windows 11
+
+1. 下载 `Paster-Windows-x64.zip`，整个文件夹一起解压（请勿只取 exe，需保持文件完整）
+2. 直接运行 `Paster.Windows.exe` — 无需安装，已是自包含版本
+3. 由于未做代码签名，SmartScreen 可能提示风险：选择「**更多信息 → 仍要运行**」
+4. 应用以**系统托盘图标**常驻（无任务栏窗口），按 `Alt+C` 呼出面板，或左键点击托盘图标
+5. 退出方式：右键托盘图标 → 「**退出 Paster**」
 
 ## 截图
 
@@ -59,6 +71,8 @@
 
 ## 技术栈
 
+macOS：
+
 | 项 | 选型 |
 | --- | --- |
 | 语言 | Swift 5+ |
@@ -66,6 +80,17 @@
 | 存储 | SwiftData（本地） |
 | 架构 | MVVM 分层 |
 | 最低系统 | macOS 14.0 |
+
+Windows（详见 [`windows/README.md`](windows/README.md)）：
+
+| 项 | 选型 |
+| --- | --- |
+| 语言 | C# / .NET 8 |
+| UI | WinUI 3（Windows App SDK），非打包桌面应用 |
+| 原生互操作 | `RegisterHotKey`、`AddClipboardFormatListener`、`Shell_NotifyIcon`、`SendInput` |
+| 存储 | SQLite（本地） |
+| 架构 | MVVM 分层 |
+| 最低系统 | Windows 11（Windows 10 21H2 或更新版本大概率可用） |
 
 ## 工程结构
 
@@ -164,8 +189,8 @@ touch build/Paster.app && killall Finder Dock
 
 ## 路线图
 
-- V1.0（本仓库）：macOS 原生版。
-- V2.0（规划中）：Windows 11 版（WinUI 3 + C#），对齐 macOS 端核心功能与交互。
+- V1.0 – V1.2：macOS 原生版（Swift / SwiftUI / SwiftData）。
+- V2.0：Windows 11 原生版（C# / WinUI 3 / SQLite），位于 [`windows/`](windows/) 目录，对齐 macOS 端核心功能与交互。
 
 ## License
 
