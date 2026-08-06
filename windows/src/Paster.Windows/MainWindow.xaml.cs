@@ -32,7 +32,15 @@ public sealed partial class MainWindow : Window
 {
     private const int PanelWidth = 680;
     private const int PanelHeight = 640;
+    private const int SidebarWidth = 420;
     private const double CardSpacing = 10;
+
+    /// <summary>
+    /// Gap left between a bar card and the top/bottom of the scroll viewport. A card sized to the
+    /// full viewport gets its 1.5px border and 12px corner radius shaved off by the viewport clip,
+    /// which is what made the bottom bar's cards look cut off.
+    /// </summary>
+    private const double BarCardEdgeInset = 4;
 
     /// <summary>
     /// The header is a label, not a banner: the panel is a transient overlay and every point
@@ -101,13 +109,11 @@ public sealed partial class MainWindow : Window
     private bool _renderRequested;
     private bool _cardsDirty = true;
     private double _barCardWidth = 220;
-    private double _barCardMinHeight = 100;
-    private double _barCardMaxHeight = 140;
+    private double _barCardHeight = 120;
     private SizeInt32? _lastAppliedSize;
     private RectInt32? _lastAppliedRect;
     private bool _windowShownOnce;
     private bool _isVisible;
-    private bool _hotkeyPanelSession;
 
     private bool IsBarLayout => _settings.PanelPosition is PanelPosition.Bottom or PanelPosition.Top;
     private bool IsChinese => _settings.Language == AppLanguage.ChineseSimplified ||
@@ -187,8 +193,20 @@ public sealed partial class MainWindow : Window
 
     public void ShowMainWindow(string status)
     {
-        ShowMainWindowInternal(status, center: true);
+        ShowMainWindowInternal(status);
     }
+
+    /// <summary>
+    /// Owned by <see cref="App"/>; handed over so the settings window can re-register the global
+    /// hotkey without the App layer having to mediate every settings interaction.
+    /// </summary>
+    public HotKeyService? HotKeys { get; set; }
+
+    /// <summary>The combination Windows currently holds, falling back to the persisted setting.</summary>
+    private string HotKeyDisplay => HotKey.Describe(
+        HotKeys?.ActiveModifiers ?? _settings.HotKeyModifiers,
+        HotKeys?.ActiveVirtualKey ?? _settings.HotKeyVirtualKey,
+        IsChinese);
 
     public void ShowSettingsWindow()
     {
@@ -198,12 +216,13 @@ public sealed partial class MainWindow : Window
             {
                 _statusText.Text = T("Settings updated.", "设置已更新。");
                 ApplyWindowSizeForCurrentPosition();
+                // Picks up a changed hotkey in the footer help text too.
                 ApplyLocalizedTexts();
                 ApplyLayoutMode();
                 ApplyBackdrop();
                 _cardsDirty = true;
                 RequestRender();
-            });
+            }, HotKeys);
             _settingsWindow.Closed += (_, _) => _settingsWindow = null;
         }
 
@@ -225,22 +244,26 @@ public sealed partial class MainWindow : Window
 
     private void ShowPanel(IntPtr targetWindow)
     {
-        _hotkeyPanelSession = true;
-        ShowMainWindowInternal(T("Paster opened by Alt+C.", "已通过 Alt+C 打开 Paster。"), center: false);
+        var hotkey = HotKeyDisplay;
+        ShowMainWindowInternal(T($"Paster opened by {hotkey}.", $"已通过 {hotkey} 打开 Paster。"));
     }
 
-    private void ShowMainWindowInternal(string status, bool center)
+    private void ShowMainWindowInternal(string status)
     {
         var sw = Stopwatch.StartNew();
         _statusText.Text = status;
         EnsureNativeWindowVisible();
         AppLog.Trace($"ShowPanel checkpoint: ensure-visible {sw.ElapsedMilliseconds}ms");
-        PositionForCurrentSetting(forceCenter: center);
+        PositionForCurrentSetting();
         AppLog.Trace($"ShowPanel checkpoint: positioned {sw.ElapsedMilliseconds}ms");
 
         _root.Visibility = Visibility.Visible;
         PrepareEntranceState();
         AppLog.Trace($"ShowPanel checkpoint: prepared entrance {sw.ElapsedMilliseconds}ms");
+        // Re-asserted on every show: other topmost windows shown after ours (Start, notification
+        // centre) otherwise sit ahead of us inside the topmost band.
+        NativeMethods.SetWindowPos(_hwnd, NativeMethods.HwndTopmost, 0, 0, 0, 0,
+            NativeMethods.SwpNoMove | NativeMethods.SwpNoSize | NativeMethods.SwpNoActivate);
         NativeMethods.SetForegroundWindow(_hwnd);
         Activate();
         AppLog.Trace($"ShowPanel checkpoint: activated {sw.ElapsedMilliseconds}ms");
@@ -452,9 +475,10 @@ public sealed partial class MainWindow : Window
         _clearButton.Content = T("Clear", "清空");
         _settingsButton.Content = T("Settings", "设置");
         _searchBox.PlaceholderText = T("Search text, URL, file path or source app", "搜索文本、链接、文件路径或来源应用");
+        var hotkey = HotKeyDisplay;
         _helpText.Text = T(
-            "Alt+C show/hide, Enter paste, Ctrl+Shift+Enter plain paste, Del delete, Ctrl+P pin, Esc hide.",
-            "Alt+C 显示/隐藏，Enter 粘贴，Ctrl+Shift+Enter 纯文本粘贴，Del 删除，Ctrl+P 置顶，Esc 隐藏。");
+            $"{hotkey} show/hide, Enter paste, Ctrl+Shift+Enter plain paste, Del delete, Ctrl+P pin, Esc hide.",
+            $"{hotkey} 显示/隐藏，Enter 粘贴，Ctrl+Shift+Enter 纯文本粘贴，Del 删除，Ctrl+P 置顶，Esc 隐藏。");
 
         _menuPaste.Text = T("Paste", "粘贴");
         _menuPastePlain.Text = T("Paste as plain text", "粘贴为纯文本");
@@ -1043,9 +1067,13 @@ public sealed partial class MainWindow : Window
     {
         var bar = IsBarLayout;
         parts.Root.Width = bar ? _barCardWidth : double.NaN;
-        parts.Root.MinHeight = bar ? _barCardMinHeight : 0;
-        parts.Root.MaxHeight = bar ? _barCardMaxHeight : double.PositiveInfinity;
+        parts.Root.Height = bar ? _barCardHeight : double.NaN;
+        parts.Root.MinHeight = 0;
+        parts.Root.MaxHeight = double.PositiveInfinity;
         parts.Root.HorizontalAlignment = bar ? HorizontalAlignment.Left : HorizontalAlignment.Stretch;
+        // Centred rather than stretched so the inset is shared between the top and bottom edges
+        // instead of all landing on one side.
+        parts.Root.VerticalAlignment = bar ? VerticalAlignment.Center : VerticalAlignment.Top;
         parts.BodyRow.Height = bar ? new GridLength(1, GridUnitType.Star) : GridLength.Auto;
         parts.TextPreview.MaxLines = bar ? BarPreviewLineCount() : 4;
         parts.ImagePreview.MaxHeight = bar ? double.PositiveInfinity : 180;
@@ -1061,7 +1089,7 @@ public sealed partial class MainWindow : Window
     {
         const double chrome = 71;
         const double lineHeight = 19;
-        return (int)Math.Clamp(Math.Floor((_barCardMaxHeight - chrome) / lineHeight), 2, 8);
+        return (int)Math.Clamp(Math.Floor((_barCardHeight - chrome) / lineHeight), 1, 8);
     }
 
     private void ApplyCardMetricsToRealized()
@@ -1312,15 +1340,20 @@ public sealed partial class MainWindow : Window
             return false;
         }
 
-        var viewportWidth = _historyScroll.ActualWidth;
-        var viewportHeight = _historyScroll.ActualHeight;
+        // ViewportWidth/Height are the ScrollViewer's inner content area, already net of its
+        // chrome, so they are what a card actually has to fit inside. ActualWidth/Height are the
+        // outer box and were the reason the old constants had to guess at the difference.
+        var viewportWidth = _historyScroll.ViewportWidth > 1 ? _historyScroll.ViewportWidth : _historyScroll.ActualWidth;
+        var viewportHeight = _historyScroll.ViewportHeight > 1 ? _historyScroll.ViewportHeight : _historyScroll.ActualHeight;
         if (viewportWidth <= 1)
         {
-            viewportWidth = SizeForCurrentPosition().Width - _root.Padding.Left - _root.Padding.Right;
+            var screen = CurrentScreen();
+            viewportWidth = SizeForCurrentPosition(screen).Width / screen.Scale -
+                            _root.Padding.Left - _root.Padding.Right;
         }
         if (viewportHeight <= 1)
         {
-            viewportHeight = Math.Clamp(_settings.BarHeight - 88, 92, 540);
+            viewportHeight = EstimatedBarViewportHeight();
         }
 
         var targetVisibleCards = viewportWidth switch
@@ -1336,21 +1369,35 @@ public sealed partial class MainWindow : Window
         var rawWidth = (viewportWidth - reserved - (targetVisibleCards - 1) * spacing) / targetVisibleCards;
         var width = Math.Clamp(rawWidth, 180, 360);
 
-        var rawHeight = viewportHeight - 12;
-        var minHeight = Math.Clamp(rawHeight - 10, 90, 520);
-        var maxHeight = Math.Clamp(rawHeight + 20, 120, 560);
+        // One exact height rather than a min/max window: the previous max was deliberately larger
+        // than the viewport, so the tallest cards were always clipped. Never round up here.
+        var height = Math.Max(1, viewportHeight - BarCardEdgeInset);
 
-        if (Math.Abs(width - _barCardWidth) < 0.5 &&
-            Math.Abs(minHeight - _barCardMinHeight) < 0.5 &&
-            Math.Abs(maxHeight - _barCardMaxHeight) < 0.5)
+        if (Math.Abs(width - _barCardWidth) < 0.5 && Math.Abs(height - _barCardHeight) < 0.5)
         {
             return false;
         }
 
         _barCardWidth = width;
-        _barCardMinHeight = minHeight;
-        _barCardMaxHeight = maxHeight;
+        _barCardHeight = height;
+        AppLog.Trace($"BarCardSizing viewport={viewportWidth:F1}x{viewportHeight:F1} " +
+                     $"scrollActual={_historyScroll.ActualWidth:F1}x{_historyScroll.ActualHeight:F1} " +
+                     $"rootActual={_root.ActualWidth:F1}x{_root.ActualHeight:F1} " +
+                     $"searchActual={_searchBox.ActualHeight:F1} card={width:F1}x{height:F1}");
         return true;
+    }
+
+    /// <summary>
+    /// First-frame estimate for the list viewport, used only until the ScrollViewer has been
+    /// measured. <see cref="AppSettings.BarHeight"/> is in DIPs, matching layout units directly.
+    /// </summary>
+    private double EstimatedBarViewportHeight()
+    {
+        var panelHeight = Math.Clamp(_settings.BarHeight, 160, 600);
+        var chrome = _root.Padding.Top + _root.Padding.Bottom +
+                     _searchBox.Margin.Top + _searchBox.Margin.Bottom +
+                     (_searchBox.ActualHeight > 1 ? _searchBox.ActualHeight : 32);
+        return Math.Max(1, panelHeight - chrome);
     }
 
     // MARK: - Window plumbing
@@ -1361,7 +1408,6 @@ public sealed partial class MainWindow : Window
         ParkWindow();
         _isVisible = false;
         PanelVisibilityChanged?.Invoke(false);
-        _hotkeyPanelSession = false;
         AppLog.Trace("Panel hidden (parked off-screen).");
     }
 
@@ -1372,10 +1418,20 @@ public sealed partial class MainWindow : Window
             _backdropConfiguration.IsInputActive = args.WindowActivationState != WindowActivationState.Deactivated;
         }
 
-        if (_hotkeyPanelSession && args.WindowActivationState == WindowActivationState.Deactivated)
+        if (args.WindowActivationState != WindowActivationState.Deactivated)
         {
-            HidePanel();
+            return;
         }
+
+        // Auto-hide on focus loss regardless of how the panel was opened. Previously only hotkey
+        // sessions did this, so a tray- or startup-opened panel stayed behind whatever the user
+        // clicked next instead of getting out of the way.
+        if (!_isVisible || _settingsWindow is not null)
+        {
+            return;
+        }
+
+        HidePanel();
     }
 
     private void ConfigureWindow()
@@ -1413,7 +1469,15 @@ public sealed partial class MainWindow : Window
             presenter.IsResizable = false;
             presenter.IsMaximizable = false;
             presenter.IsMinimizable = false;
+            // A docked bar overlaps the taskbar, so without this it would be painted over.
+            presenter.IsAlwaysOnTop = true;
         }
+
+        // The presenter flag is applied through the same WS_EX_TOPMOST bit, but setting it directly
+        // also re-asserts the position in the topmost z-order band, which is what keeps the panel
+        // above other topmost windows it was created before.
+        NativeMethods.SetWindowPos(_hwnd, NativeMethods.HwndTopmost, 0, 0, 0, 0,
+            NativeMethods.SwpNoMove | NativeMethods.SwpNoSize | NativeMethods.SwpNoActivate);
     }
 
     private void EnsureNativeWindowVisible()
@@ -1427,19 +1491,76 @@ public sealed partial class MainWindow : Window
         _windowShownOnce = true;
     }
 
+    /// <summary>
+    /// Hides the panel by moving it clear of every display. <c>ShowWindow(SW_HIDE)</c> would be the
+    /// obvious choice, but re-showing repaints the window white for a frame before the entrance
+    /// animation runs, which is the "先白一下" flash this parking approach was introduced to fix.
+    /// The park target is derived from the virtual desktop extent rather than the primary monitor,
+    /// so a second display placed to the right of or below the primary cannot end up displaying it.
+    /// </summary>
     private void ParkWindow()
     {
         _root.Visibility = Visibility.Collapsed;
-        var screenWidth = NativeMethods.GetSystemMetrics(0);
-        var screenHeight = NativeMethods.GetSystemMetrics(1);
         var appWindow = AppWindow.GetFromWindowId(Win32Interop.GetWindowIdFromWindow(_hwnd));
         var size = appWindow.Size;
-        ApplyWindowRect(new RectInt32(screenWidth + 120, screenHeight + 120, size.Width, size.Height));
+        var virtualRight = NativeMethods.GetSystemMetrics(NativeMethods.SmXVirtualScreen) +
+                           NativeMethods.GetSystemMetrics(NativeMethods.SmCxVirtualScreen);
+        var virtualBottom = NativeMethods.GetSystemMetrics(NativeMethods.SmYVirtualScreen) +
+                            NativeMethods.GetSystemMetrics(NativeMethods.SmCyVirtualScreen);
+        ApplyWindowRect(new RectInt32(virtualRight + 200, virtualBottom + 200, size.Width, size.Height));
     }
 
-    private void ApplyWindowSizeForCurrentPosition()
+    /// <summary>
+    /// Full pixel bounds and scale factor of the display under the mouse cursor.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately <c>rcMonitor</c> and not <c>rcWork</c>: the docked bar is meant to reach the
+    /// physical screen edge and sit over the taskbar, which it can do because the panel is topmost.
+    /// </remarks>
+    private static ScreenBounds CurrentScreen()
     {
-        var size = SizeForCurrentPosition();
+        NativeMethods.GetCursorPos(out var cursor);
+        var monitor = NativeMethods.MonitorFromPoint(cursor, NativeMethods.MonitorDefaultToNearest);
+        var info = NativeMethods.MonitorInfo.Create();
+        if (monitor == IntPtr.Zero || !NativeMethods.GetMonitorInfo(monitor, ref info))
+        {
+            return new ScreenBounds(0, 0,
+                NativeMethods.GetSystemMetrics(0),
+                NativeMethods.GetSystemMetrics(1),
+                1.0);
+        }
+
+        var scale = 1.0;
+        if (NativeMethods.GetDpiForMonitor(monitor, NativeMethods.MdtEffectiveDpi, out var dpiX, out _) == 0 && dpiX > 0)
+        {
+            scale = dpiX / 96.0;
+        }
+
+        return new ScreenBounds(
+            info.Monitor.Left,
+            info.Monitor.Top,
+            info.Monitor.Right - info.Monitor.Left,
+            info.Monitor.Bottom - info.Monitor.Top,
+            scale);
+    }
+
+    /// <summary>
+    /// Physical pixel bounds of one display plus its scale factor. AppWindow.MoveAndResize works in
+    /// physical pixels while every dimension in settings and layout code is expressed in DIPs, so
+    /// <see cref="Px"/> is the single conversion point between the two.
+    /// </summary>
+    private readonly record struct ScreenBounds(int X, int Y, int Width, int Height, double Scale)
+    {
+        public int Right => X + Width;
+        public int Bottom => Y + Height;
+
+        public int Px(double dips) => (int)Math.Round(dips * Scale);
+    }
+
+    private void ApplyWindowSizeForCurrentPosition() => ApplyWindowSizeForCurrentPosition(SizeForCurrentPosition());
+
+    private void ApplyWindowSizeForCurrentPosition(SizeInt32 size)
+    {
         if (_lastAppliedSize is SizeInt32 applied &&
             applied.Width == size.Width &&
             applied.Height == size.Height)
@@ -1451,64 +1572,69 @@ public sealed partial class MainWindow : Window
         _lastAppliedSize = size;
     }
 
-    private SizeInt32 SizeForCurrentPosition()
-    {
-        var screenWidth = NativeMethods.GetSystemMetrics(0);
-        var screenHeight = NativeMethods.GetSystemMetrics(1);
-        return _settings.PanelPosition switch
-        {
-            PanelPosition.Bottom or PanelPosition.Top => new SizeInt32(screenWidth, Math.Clamp((int)_settings.BarHeight, 160, 600)),
-            PanelPosition.Left or PanelPosition.Right => new SizeInt32(420, screenHeight),
-            _ => new SizeInt32(PanelWidth, PanelHeight)
-        };
-    }
+    private SizeInt32 SizeForCurrentPosition() => SizeForCurrentPosition(CurrentScreen());
 
-    private void PositionForCurrentSetting(bool forceCenter = false)
+    /// <summary>
+    /// Panel size in physical pixels. Bars and sidebars span the full monitor edge; every other
+    /// dimension is authored in DIPs and scaled here, so the same setting produces the same apparent
+    /// size on a 100% and a 150% display.
+    /// </summary>
+    private SizeInt32 SizeForCurrentPosition(ScreenBounds screen) => _settings.PanelPosition switch
     {
-        ApplyWindowSizeForCurrentPosition();
-        if (forceCenter || _settings.PanelPosition == PanelPosition.Center)
+        PanelPosition.Bottom or PanelPosition.Top =>
+            new SizeInt32(screen.Width, screen.Px(Math.Clamp(_settings.BarHeight, 160, 600))),
+        PanelPosition.Left or PanelPosition.Right =>
+            new SizeInt32(screen.Px(SidebarWidth), screen.Height),
+        _ => new SizeInt32(screen.Px(PanelWidth), screen.Px(PanelHeight))
+    };
+
+    /// <summary>
+    /// Places the panel according to <see cref="AppSettings.PanelPosition"/>. There is deliberately
+    /// no override for centring: the tray path used to force it, which silently ignored a user who
+    /// had chosen a docked position, and <see cref="PanelPosition.Center"/> is the way to ask for it.
+    /// </summary>
+    private void PositionForCurrentSetting()
+    {
+        var screen = CurrentScreen();
+        var size = SizeForCurrentPosition(screen);
+        ApplyWindowSizeForCurrentPosition(size);
+
+        if (_settings.PanelPosition == PanelPosition.Center)
         {
-            PositionCenter();
+            PositionCenter(screen, size);
             return;
         }
 
         if (_settings.PanelPosition != PanelPosition.Cursor)
         {
-            PositionDocked();
+            PositionDocked(screen, size);
             return;
         }
 
+        var margin = screen.Px(12);
         NativeMethods.GetCursorPos(out var cursor);
-        var screenWidth = NativeMethods.GetSystemMetrics(0);
-        var screenHeight = NativeMethods.GetSystemMetrics(1);
-        var size = SizeForCurrentPosition();
-        var x = Math.Clamp(cursor.X, 12, Math.Max(12, screenWidth - size.Width - 12));
-        var y = Math.Clamp(cursor.Y, 12, Math.Max(12, screenHeight - size.Height - 12));
+        var x = Math.Clamp(cursor.X, screen.X + margin, Math.Max(screen.X + margin, screen.Right - size.Width - margin));
+        var y = Math.Clamp(cursor.Y, screen.Y + margin, Math.Max(screen.Y + margin, screen.Bottom - size.Height - margin));
         ApplyWindowRect(new RectInt32(x, y, size.Width, size.Height));
     }
 
-    private void PositionCenter()
+    private void PositionCenter(ScreenBounds screen, SizeInt32 size)
     {
-        var screenWidth = NativeMethods.GetSystemMetrics(0);
-        var screenHeight = NativeMethods.GetSystemMetrics(1);
-        var size = SizeForCurrentPosition();
-        var x = Math.Max(12, (screenWidth - size.Width) / 2);
-        var y = Math.Max(12, (screenHeight - size.Height) / 2);
+        var x = screen.X + Math.Max(0, (screen.Width - size.Width) / 2);
+        var y = screen.Y + Math.Max(0, (screen.Height - size.Height) / 2);
         ApplyWindowRect(new RectInt32(x, y, size.Width, size.Height));
     }
 
-    private void PositionDocked()
+    private void PositionDocked(ScreenBounds screen, SizeInt32 size)
     {
-        var screenWidth = NativeMethods.GetSystemMetrics(0);
-        var screenHeight = NativeMethods.GetSystemMetrics(1);
-        var size = SizeForCurrentPosition();
         var (x, y) = _settings.PanelPosition switch
         {
-            PanelPosition.Top => (0, 0),
-            PanelPosition.Bottom => (0, Math.Max(0, screenHeight - size.Height)),
-            PanelPosition.Left => (0, 0),
-            PanelPosition.Right => (Math.Max(0, screenWidth - size.Width), 0),
-            _ => (Math.Max(12, (screenWidth - size.Width) / 2), Math.Max(12, (screenHeight - size.Height) / 2))
+            PanelPosition.Top => (screen.X, screen.Y),
+            PanelPosition.Bottom => (screen.X, screen.Bottom - size.Height),
+            PanelPosition.Left => (screen.X, screen.Y),
+            PanelPosition.Right => (screen.Right - size.Width, screen.Y),
+            _ => (screen.X + Math.Max(0, (screen.Width - size.Width) / 2),
+                  screen.Y + Math.Max(0, (screen.Height - size.Height) / 2))
         };
         ApplyWindowRect(new RectInt32(x, y, size.Width, size.Height));
     }

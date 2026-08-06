@@ -2,6 +2,7 @@ using Microsoft.UI;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Paster.Windows.Models;
@@ -11,6 +12,7 @@ using Paster.Windows.Utilities;
 using Paster.Windows.ViewModels;
 using System.Globalization;
 using Windows.Graphics;
+using Windows.System;
 using WinRT.Interop;
 
 namespace Paster.Windows;
@@ -18,10 +20,12 @@ namespace Paster.Windows;
 public sealed class SettingsWindow : Window
 {
     /// <summary>
-    /// Wide enough that the QR modules survive the downscale from the source cards and stay
-    /// scannable off the screen.
+    /// Floor on a code's column so the modules stay resolvable by a phone camera however narrow
+    /// the window gets, and a ceiling on its height so two portrait cards side by side still fit
+    /// on the page without scrolling.
     /// </summary>
-    private const double DonateCodeWidth = 240;
+    private const double DonateCodeMinWidth = 150;
+    private const double DonateCodeMaxHeight = 300;
 
     private readonly AppSettings _settings;
     private readonly ClipboardViewModel _viewModel;
@@ -35,16 +39,20 @@ public sealed class SettingsWindow : Window
     private readonly NumberBox _historyLimitBox = new();
     private readonly ToggleSwitch _launchAtLoginToggle = new();
     private readonly TextBlock _statusText = new();
+    private readonly HotKeyService? _hotKeys;
+    private readonly Button _hotKeyButton = new();
+    private bool _recordingHotKey;
     private bool _suppressLaunchAtLoginToggle;
     private bool IsChinese => _settings.Language == AppLanguage.ChineseSimplified ||
                               (_settings.Language == AppLanguage.System &&
                                CultureInfo.CurrentUICulture.TwoLetterISOLanguageName.Equals("zh", StringComparison.OrdinalIgnoreCase));
 
-    public SettingsWindow(AppSettings settings, ClipboardViewModel viewModel, Action onSettingsChanged)
+    public SettingsWindow(AppSettings settings, ClipboardViewModel viewModel, Action onSettingsChanged, HotKeyService? hotKeys)
     {
         _settings = settings;
         _viewModel = viewModel;
         _onSettingsChanged = onSettingsChanged;
+        _hotKeys = hotKeys;
         Title = T("Paster Settings", "Paster 设置");
         Content = BuildContent();
         ConfigureWindow();
@@ -82,9 +90,11 @@ public sealed class SettingsWindow : Window
             LabeledControl(T("Launch at login", "开机启动"), _launchAtLoginToggle)
         }));
 
-        panel.Children.Add(Section(T("Shortcuts", "快捷键"), new[]
+        BuildHotKeyRecorder();
+
+        panel.Children.Add(Section(T("Shortcuts", "快捷键"), new UIElement[]
         {
-            LabelValue(T("Show / hide panel", "显示/隐藏面板"), "Alt+C"),
+            LabeledControl(T("Show / hide panel", "显示/隐藏面板"), _hotKeyButton),
             LabelValue(T("Paste as plain text", "纯文本粘贴"), "Ctrl+Shift+Enter"),
             LabelValue(T("Delete selected", "删除选中项"), T("Del / Backspace when search is empty", "Del / Backspace（搜索框为空）"))
         }));
@@ -246,7 +256,7 @@ public sealed class SettingsWindow : Window
                 NavigateUri = new Uri("https://www.paypal.com/paypalme/yinxu0619")
             }
         };
-        donate.AddRange(BuildDonateContent());
+        donate.Add(BuildDonateContent());
         panel.Children.Add(Section(T("Support the Author", "赞赏支持"), donate));
 
         _statusText.Text = T("Settings are saved automatically.", "设置会自动保存。");
@@ -255,6 +265,101 @@ public sealed class SettingsWindow : Window
 
         return root;
     }
+
+    /// <summary>
+    /// Click-to-record button, mirroring HotKeyRecorder.swift on macOS: the button shows the
+    /// current combination, a click arms it, the next chord with at least one modifier commits,
+    /// and Esc cancels.
+    /// </summary>
+    private void BuildHotKeyRecorder()
+    {
+        _hotKeyButton.MinWidth = 150;
+        _hotKeyButton.IsEnabled = _hotKeys is not null;
+        ShowCurrentHotKey();
+
+        _hotKeyButton.Click += (_, _) =>
+        {
+            if (_recordingHotKey)
+            {
+                StopRecording();
+                return;
+            }
+
+            _recordingHotKey = true;
+            _hotKeyButton.Content = T("Press a shortcut...", "请按下快捷键...");
+            _statusText.Text = T("Waiting for a shortcut. Esc cancels.", "等待快捷键输入，按 Esc 取消。");
+        };
+
+        // PreviewKeyDown rather than KeyDown: Alt and Tab chords are consumed by the framework's
+        // own handling before they reach the bubbling event.
+        _hotKeyButton.PreviewKeyDown += HotKeyButton_PreviewKeyDown;
+        _hotKeyButton.LostFocus += (_, _) =>
+        {
+            if (_recordingHotKey)
+            {
+                StopRecording();
+            }
+        };
+    }
+
+    private void HotKeyButton_PreviewKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (!_recordingHotKey || _hotKeys is null)
+        {
+            return;
+        }
+
+        e.Handled = true;
+        if (e.Key == VirtualKey.Escape)
+        {
+            StopRecording();
+            _statusText.Text = T("Shortcut unchanged.", "快捷键未更改。");
+            return;
+        }
+
+        // Modifiers alone are not a shortcut; keep waiting for the key they are modifying.
+        if (HotKey.IsModifierKey(e.Key))
+        {
+            return;
+        }
+
+        var modifiers = HotKey.CurrentModifiers();
+        var virtualKey = (int)e.Key;
+        if (!HotKey.HasModifier(modifiers))
+        {
+            _statusText.Text = T(
+                "A global shortcut needs at least one of Ctrl, Alt, Shift or Win.",
+                "全局快捷键至少需要 Ctrl、Alt、Shift 或 Win 中的一个。");
+            return;
+        }
+
+        var description = HotKey.Describe(modifiers, virtualKey, IsChinese);
+        if (_hotKeys.Apply(modifiers, virtualKey))
+        {
+            _settings.HotKeyVirtualKey = virtualKey;
+            _settings.HotKeyModifiers = modifiers;
+            StopRecording();
+            Save(T($"Shortcut set to {description}.", $"快捷键已设为 {description}。"));
+            return;
+        }
+
+        // Apply() has already put the previous combination back, so the settings values are still
+        // the working ones and must not be overwritten.
+        var current = HotKey.Describe(_hotKeys.ActiveModifiers, _hotKeys.ActiveVirtualKey, IsChinese);
+        StopRecording();
+        _statusText.Text = T(
+            $"{description} is already in use by another app (Windows error {_hotKeys.LastError}). Still using {current}.",
+            $"{description} 已被其他应用占用（Windows 错误 {_hotKeys.LastError}）。仍使用 {current}。");
+    }
+
+    private void StopRecording()
+    {
+        _recordingHotKey = false;
+        ShowCurrentHotKey();
+    }
+
+    private void ShowCurrentHotKey() =>
+        _hotKeyButton.Content = HotKey.Describe(_settings.HotKeyModifiers, _settings.HotKeyVirtualKey, IsChinese);
 
     private void LaunchAtLogin_Toggled(object sender, RoutedEventArgs e)
     {
@@ -285,47 +390,56 @@ public sealed class SettingsWindow : Window
     /// A fresh clone may not have the donation images, so show a note rather than a broken frame
     /// when they are absent.
     /// </summary>
-    private IEnumerable<UIElement> BuildDonateContent()
+    private UIElement BuildDonateContent()
     {
         var donateDir = Path.Combine(AppContext.BaseDirectory, "Assets", "Donate");
-        var wechat = Path.Combine(donateDir, "donate_wechat.png");
-        var alipay = Path.Combine(donateDir, "donate_alipay.png");
-        var previews = new List<UIElement>();
-
-        if (File.Exists(wechat))
+        var codes = new (string Title, string Path)[]
         {
-            previews.Add(DonatePreview(T("WeChat Pay", "微信支付"), wechat));
-        }
+            (T("WeChat Pay", "微信支付"), Path.Combine(donateDir, "donate_wechat.png")),
+            (T("Alipay", "支付宝"), Path.Combine(donateDir, "donate_alipay.png"))
+        }.Where(x => File.Exists(x.Path)).ToArray();
 
-        if (File.Exists(alipay))
+        if (codes.Length == 0)
         {
-            previews.Add(DonatePreview(T("Alipay", "支付宝"), alipay));
-        }
-
-        if (previews.Count == 0)
-        {
-            previews.Add(new TextBlock
+            return new TextBlock
             {
                 Text = T(
                     "Donation QR codes are not bundled with this build. Add donate_wechat.png / donate_alipay.png to Assets\\Donate to show them here.",
                     "此版本未内置赞赏码。将 donate_wechat.png / donate_alipay.png 放入 Assets\\Donate 后即可显示。"),
                 TextWrapping = TextWrapping.Wrap,
                 Foreground = ThemeBrushes.TertiaryText
-            });
+            };
         }
 
-        return previews;
+        // Star columns rather than fixed widths: the codes then grow and shrink with the window
+        // instead of forcing the page to scroll at one particular size.
+        var row = new Grid { ColumnSpacing = 12 };
+        for (var i = 0; i < codes.Length; i++)
+        {
+            row.ColumnDefinitions.Add(new ColumnDefinition
+            {
+                Width = new GridLength(1, GridUnitType.Star),
+                MinWidth = DonateCodeMinWidth
+            });
+
+            var cell = DonatePreview(codes[i].Title, codes[i].Path);
+            Grid.SetColumn(cell, i);
+            row.Children.Add(cell);
+        }
+
+        return row;
     }
 
-    private static UIElement DonatePreview(string title, string imagePath)
+    private static FrameworkElement DonatePreview(string title, string imagePath)
     {
-        // Width-driven with a free height: the source codes are portrait cards, so a square box
-        // would letterbox them down to a module size no phone camera can resolve.
+        // Uniform so the code is never distorted, and height-capped so a portrait source card
+        // cannot make the section tall enough to need scrolling. Whichever of the two constraints
+        // binds first wins, and the aspect ratio is preserved either way.
         var image = new Image
         {
-            Width = DonateCodeWidth,
             Stretch = Stretch.Uniform,
-            HorizontalAlignment = HorizontalAlignment.Left
+            MaxHeight = DonateCodeMaxHeight,
+            HorizontalAlignment = HorizontalAlignment.Center
         };
 
         try
@@ -342,12 +456,13 @@ public sealed class SettingsWindow : Window
             };
         }
 
-        var stack = new StackPanel { Spacing = 6, HorizontalAlignment = HorizontalAlignment.Left };
+        var stack = new StackPanel { Spacing = 6 };
         stack.Children.Add(new TextBlock
         {
             Text = title,
             FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
-            Foreground = ThemeBrushes.PrimaryText
+            Foreground = ThemeBrushes.PrimaryText,
+            HorizontalAlignment = HorizontalAlignment.Center
         });
         stack.Children.Add(new Border
         {
@@ -358,7 +473,6 @@ public sealed class SettingsWindow : Window
             BorderBrush = ThemeBrushes.CardBorder,
             BorderThickness = new Thickness(1),
             Padding = new Thickness(6),
-            HorizontalAlignment = HorizontalAlignment.Left,
             Child = image
         });
         return stack;
@@ -444,7 +558,14 @@ public sealed class SettingsWindow : Window
         // shrinks the window on a scaled display and clips the donation codes.
         var dpi = NativeMethods.GetDpiForWindow(hwnd);
         var scale = dpi == 0 ? 1.0 : dpi / 96.0;
-        appWindow.Resize(new SizeInt32((int)(560 * scale), (int)(680 * scale)));
+        appWindow.Resize(new SizeInt32((int)(600 * scale), (int)(900 * scale)));
+
+        // The panel is topmost so that a docked bar can cover the taskbar; without matching that,
+        // this window would open underneath the very panel it is configuring.
+        if (appWindow.Presenter is OverlappedPresenter presenter)
+        {
+            presenter.IsAlwaysOnTop = true;
+        }
     }
 
     private string T(string english, string chinese) => IsChinese ? chinese : english;

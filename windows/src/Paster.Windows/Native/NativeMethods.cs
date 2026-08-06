@@ -8,6 +8,11 @@ internal static partial class NativeMethods
     public const int WmLButtonUp = 0x0202;
     public const int WmRButtonUp = 0x0205;
     public const uint WmNull = 0x0000;
+    public const int VkShift = 0x10;
+    public const int VkControl = 0x11;
+    public const int VkMenu = 0x12;
+    public const int VkLWin = 0x5B;
+    public const int VkRWin = 0x5C;
     public const uint ModAlt = 0x0001;
     public const uint ModControl = 0x0002;
     public const uint ModShift = 0x0004;
@@ -22,7 +27,15 @@ internal static partial class NativeMethods
     public const int WsExToolWindow = 0x00000080;
     public const int WsExAppWindow = 0x00040000;
     public static readonly IntPtr HwndTopmost = new(-1);
+    public const uint SwpNoActivate = 0x0010;
+    public const uint MonitorDefaultToNearest = 0x00000002;
+    public const int SmXVirtualScreen = 76;
+    public const int SmYVirtualScreen = 77;
+    public const int SmCxVirtualScreen = 78;
+    public const int SmCyVirtualScreen = 79;
+    public const int MdtEffectiveDpi = 0;
     public const uint NimAdd = 0x00000000;
+    public const uint NimModify = 0x00000001;
     public const uint NimDelete = 0x00000002;
     public const uint NifMessage = 0x00000001;
     public const uint NifIcon = 0x00000002;
@@ -97,6 +110,17 @@ internal static partial class NativeMethods
         public int Y;
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    public struct MonitorInfo
+    {
+        public uint Size;
+        public Rect Monitor;
+        public Rect Work;
+        public uint Flags;
+
+        public static MonitorInfo Create() => new() { Size = (uint)Marshal.SizeOf<MonitorInfo>() };
+    }
+
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     public struct NotifyIconData
     {
@@ -157,6 +181,9 @@ internal static partial class NativeMethods
     public static partial uint GetDpiForWindow(IntPtr hWnd);
 
     [LibraryImport("user32.dll")]
+    public static partial short GetKeyState(int nVirtKey);
+
+    [LibraryImport("user32.dll")]
     public static partial uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
 
     [LibraryImport("user32.dll")]
@@ -187,6 +214,16 @@ internal static partial class NativeMethods
 
     [LibraryImport("user32.dll")]
     public static partial int GetSystemMetrics(int nIndex);
+
+    [LibraryImport("user32.dll")]
+    public static partial IntPtr MonitorFromPoint(Point pt, uint dwFlags);
+
+    [LibraryImport("user32.dll", EntryPoint = "GetMonitorInfoW")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool GetMonitorInfo(IntPtr hMonitor, ref MonitorInfo lpmi);
+
+    [LibraryImport("shcore.dll")]
+    public static partial int GetDpiForMonitor(IntPtr hMonitor, int dpiType, out uint dpiX, out uint dpiY);
 
     [LibraryImport("user32.dll")]
     public static partial short GetAsyncKeyState(int vKey);

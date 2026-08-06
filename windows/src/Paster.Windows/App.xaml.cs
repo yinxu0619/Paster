@@ -84,14 +84,17 @@ public partial class App : Application
                 _window.DispatcherQueue.TryEnqueue(() => _window.TogglePanel(targetWindow));
             };
             _hotKeyService.Start();
+            _window.HotKeys = _hotKeyService;
+            var hotkey = HotKey.Describe(settings.HotKeyModifiers, settings.HotKeyVirtualKey, chinese: false);
             AppLog.Info(_hotKeyService.IsRegistered
-                ? "Global hotkey Alt+C registered."
-                : $"Global hotkey registration failed. Win32 error {_hotKeyService.LastError}.");
+                ? $"Global hotkey {hotkey} registered."
+                : $"Global hotkey {hotkey} registration failed. Win32 error {_hotKeyService.LastError}.");
 
+            var shown = HotKey.Describe(settings.HotKeyModifiers, settings.HotKeyVirtualKey, IsChinese(settings));
             var status = _hotKeyService.IsRegistered
-                ? Localize(settings, "Ready. Global hotkey Alt+C is registered.", "就绪。全局热键 Alt+C 已注册。")
-                : Localize(settings, $"Ready, but Alt+C registration failed. Windows error: {_hotKeyService.LastError}. The shortcut may be used by another app.",
-                    $"就绪，但 Alt+C 注册失败。Windows 错误：{_hotKeyService.LastError}。可能被其他应用占用。");
+                ? Localize(settings, $"Ready. Global hotkey {shown} is registered.", $"就绪。全局热键 {shown} 已注册。")
+                : Localize(settings, $"Ready, but {shown} registration failed. Windows error: {_hotKeyService.LastError}. The shortcut may be used by another app.",
+                    $"就绪，但 {shown} 注册失败。Windows 错误：{_hotKeyService.LastError}。可能被其他应用占用。");
             _window.ShowStartup(status);
             _window.PanelVisibilityChanged += visible =>
             {
@@ -104,11 +107,15 @@ public partial class App : Application
             _trayIconService = new TrayIconService(
                 _window.DispatcherQueue,
                 (english, chinese) => Localize(settings, english, chinese),
+                shown,
                 () => _window.ShowMainWindow(Localize(settings, "Paster is running from the system tray.", "Paster 正在系统托盘中运行。")),
                 () => _ = viewModel.ClearAllAsync(),
                 () => _window.ShowSettingsWindow(),
                 Quit);
             AppLog.Info("Tray icon created.");
+
+            _hotKeyService.Changed += (_, _) => _trayIconService?.UpdateHotKey(
+                HotKey.Describe(_hotKeyService.ActiveModifiers, _hotKeyService.ActiveVirtualKey, IsChinese(settings)));
         }
         catch (Exception ex)
         {
@@ -152,11 +159,11 @@ public partial class App : Application
         }
     }
 
-    private static string Localize(AppSettings settings, string english, string chinese)
-    {
-        var useChinese = settings.Language == AppLanguage.ChineseSimplified ||
-                         (settings.Language == AppLanguage.System &&
-                          CultureInfo.CurrentUICulture.TwoLetterISOLanguageName.Equals("zh", StringComparison.OrdinalIgnoreCase));
-        return useChinese ? chinese : english;
-    }
+    private static string Localize(AppSettings settings, string english, string chinese) =>
+        IsChinese(settings) ? chinese : english;
+
+    private static bool IsChinese(AppSettings settings) =>
+        settings.Language == AppLanguage.ChineseSimplified ||
+        (settings.Language == AppLanguage.System &&
+         CultureInfo.CurrentUICulture.TwoLetterISOLanguageName.Equals("zh", StringComparison.OrdinalIgnoreCase));
 }

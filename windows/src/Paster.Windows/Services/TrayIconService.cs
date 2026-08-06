@@ -19,11 +19,13 @@ public sealed class TrayIconService : MessageWindow
     private readonly Action _quit;
     private readonly Func<string, string, string> _localize;
     private IntPtr _iconHandle;
+    private string _hotKeyDisplay;
     private bool _disposed;
 
     public TrayIconService(
         DispatcherQueue dispatcherQueue,
         Func<string, string, string> localize,
+        string hotKeyDisplay,
         Action showWindow,
         Action clearHistory,
         Action showSettings,
@@ -31,6 +33,7 @@ public sealed class TrayIconService : MessageWindow
     {
         _dispatcherQueue = dispatcherQueue;
         _localize = localize;
+        _hotKeyDisplay = hotKeyDisplay;
         _showWindow = showWindow;
         _clearHistory = clearHistory;
         _showSettings = showSettings;
@@ -39,6 +42,40 @@ public sealed class TrayIconService : MessageWindow
         Create();
         AddIcon();
     }
+
+    /// <summary>
+    /// Re-points the tooltip at a newly registered combination. NIM_MODIFY rather than a delete and
+    /// re-add so the icon keeps its slot in the notification area.
+    /// </summary>
+    public void UpdateHotKey(string hotKeyDisplay)
+    {
+        _hotKeyDisplay = hotKeyDisplay;
+        if (_disposed)
+        {
+            return;
+        }
+
+        var data = new NativeMethods.NotifyIconData
+        {
+            cbSize = System.Runtime.InteropServices.Marshal.SizeOf<NativeMethods.NotifyIconData>(),
+            hWnd = Hwnd,
+            uID = TrayIconId,
+            uFlags = NativeMethods.NifTip,
+            szTip = BuildTip()
+        };
+
+        if (!NativeMethods.ShellNotifyIcon(NativeMethods.NimModify, ref data))
+        {
+            AppLog.Info("Failed to update the tray tooltip after a hotkey change.");
+        }
+    }
+
+    /// <summary>
+    /// Names the current hotkey rather than a hardcoded "Alt+C", since the user can rebind it.
+    /// </summary>
+    private string BuildTip() => _localize(
+        $"Paster - left click or {_hotKeyDisplay} to open, right click for the menu",
+        $"Paster - 左键或 {_hotKeyDisplay} 打开，右键显示菜单");
 
     private void Enqueue(Action action)
     {
@@ -160,7 +197,7 @@ public sealed class TrayIconService : MessageWindow
             uFlags = NativeMethods.NifMessage | NativeMethods.NifIcon | NativeMethods.NifTip,
             uCallbackMessage = TrayCallbackMessage,
             hIcon = _iconHandle,
-            szTip = _localize("Paster - left click to open, right click for the menu", "Paster - 左键打开，右键显示菜单")
+            szTip = BuildTip()
         };
 
         if (!NativeMethods.ShellNotifyIcon(NativeMethods.NimAdd, ref data))
