@@ -51,6 +51,16 @@ public sealed partial class MainWindow : Window
     private const double BarTitleFontSize = 15;
     private const double BarIconSize = 18;
 
+    /// <summary>
+    /// Metrics for the bar-layout settings gear. The height stays below the search box's 32px
+    /// minimum so the gear can never be what drives row 1's height, which would shrink the card
+    /// viewport and bring back the clipped-card problem.
+    /// </summary>
+    private const double BarSettingsButtonWidth = 32;
+    private const double BarSettingsButtonHeight = 30;
+    private const double BarSettingsGlyphSize = 15;
+    private const double BarSettingsButtonGap = 8;
+
     /// <summary>Pixels travelled per unit of MouseWheelDelta (one notch is 120 units).</summary>
     private const double BarWheelPixelsPerUnit = 1.6;
     private const double VerticalWheelPixelsPerUnit = 1.2;
@@ -76,6 +86,16 @@ public sealed partial class MainWindow : Window
     private readonly StackPanel _footerPanel;
     private readonly Button _clearButton;
     private readonly Button _settingsButton;
+
+    /// <summary>
+    /// Bar layout collapses the entire header, and with it <see cref="_settingsButton"/>, so this
+    /// gear beside the search box is the only route into Settings there. It stays hidden in the
+    /// layouts that do show the header, rather than offering two Settings buttons in one view.
+    /// </summary>
+    private readonly Button _barSettingsButton;
+
+    /// <summary>Row 1, holding the bar-layout gear and the search box side by side.</summary>
+    private readonly Grid _searchRow;
 
     /// <summary>
     /// Headers and items in one flat list, because ItemsRepeater has no grouping. Reference
@@ -121,6 +141,9 @@ public sealed partial class MainWindow : Window
     /// </summary>
     private bool _confirmingClear;
 
+    /// <summary>The live confirmation, so Esc can cancel it from the panel's own key handler.</summary>
+    private ContentDialog? _clearDialog;
+
     private bool IsBarLayout => _settings.PanelPosition is PanelPosition.Bottom or PanelPosition.Top;
     private bool IsChinese => _settings.Language == AppLanguage.ChineseSimplified ||
                               (_settings.Language == AppLanguage.System &&
@@ -153,6 +176,8 @@ public sealed partial class MainWindow : Window
         _footerPanel = new StackPanel();
         _clearButton = new Button();
         _settingsButton = new Button();
+        _barSettingsButton = new Button();
+        _searchRow = new Grid();
         _renderDebounceTimer = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread().CreateTimer();
         _renderDebounceTimer.Interval = TimeSpan.FromMilliseconds(1);
         _renderDebounceTimer.IsRepeating = false;
@@ -339,7 +364,7 @@ public sealed partial class MainWindow : Window
         Grid.SetColumn(_clearButton, 1);
         _actionsPanel.Orientation = Orientation.Horizontal;
         _actionsPanel.Spacing = 8;
-        _settingsButton.Click += (_, _) => ShowSettingsWindow();
+        _settingsButton.Click += Settings_Click;
         _actionsPanel.Children.Add(_settingsButton);
         _actionsPanel.Children.Add(_clearButton);
         Grid.SetColumn(_actionsPanel, 1);
@@ -351,8 +376,19 @@ public sealed partial class MainWindow : Window
         _searchBox.Resources["TextControlBorderBrushFocused"] = ThemeBrushes.SearchFocusBorder;
         _searchBox.Resources["TextControlBorderThemeThicknessFocused"] = new Thickness(1);
         _searchBox.TextChanged += (_, _) => ViewModel.SearchText = _searchBox.Text;
-        Grid.SetRow(_searchBox, 1);
-        _root.Children.Add(_searchBox);
+
+        BuildBarSettingsButton();
+        // Row 1 is Auto-height, so its height is the taller of the two children. The gear is
+        // deliberately shorter than the search box and carries the same vertical margins, which
+        // keeps this row exactly as tall as the bare search box used to be.
+        _searchRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        _searchRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        Grid.SetColumn(_barSettingsButton, 0);
+        Grid.SetColumn(_searchBox, 1);
+        _searchRow.Children.Add(_barSettingsButton);
+        _searchRow.Children.Add(_searchBox);
+        Grid.SetRow(_searchRow, 1);
+        _root.Children.Add(_searchRow);
 
         BuildHistorySurface();
         BuildSharedContextMenu();
@@ -375,6 +411,31 @@ public sealed partial class MainWindow : Window
         SyncEntries();
 
         return _root;
+    }
+
+    /// <summary>
+    /// Icon-only gear for bar layout. Kept visually quiet on purpose: the panel is a transient
+    /// overlay and the search box is the row's subject, so the gear borrows the search box's corner
+    /// radius, paints no background of its own and lets the default Button template supply the
+    /// hover and pressed states.
+    /// </summary>
+    private void BuildBarSettingsButton()
+    {
+        _barSettingsButton.Content = new FontIcon
+        {
+            // Segoe MDL2 "Setting", matching how the cards render their own glyphs.
+            Glyph = "\uE713",
+            FontSize = BarSettingsGlyphSize,
+            Foreground = ThemeBrushes.SecondaryText
+        };
+        _barSettingsButton.Width = BarSettingsButtonWidth;
+        _barSettingsButton.Height = BarSettingsButtonHeight;
+        _barSettingsButton.Padding = new Thickness(0);
+        _barSettingsButton.BorderThickness = new Thickness(0);
+        _barSettingsButton.CornerRadius = new CornerRadius(8);
+        _barSettingsButton.VerticalAlignment = VerticalAlignment.Center;
+        _barSettingsButton.Background = new SolidColorBrush(Colors.Transparent);
+        _barSettingsButton.Click += Settings_Click;
     }
 
     /// <summary>
@@ -446,6 +507,10 @@ public sealed partial class MainWindow : Window
             _actionsPanel.Visibility = Visibility.Collapsed;
             _footerPanel.Visibility = Visibility.Collapsed;
             _searchBox.Margin = new Thickness(0, 2, 0, 6);
+            // Same vertical margins as the search box, so row 1's height is still decided by the
+            // search box alone. The right margin is the only gap between the two.
+            _barSettingsButton.Margin = new Thickness(0, 2, BarSettingsButtonGap, 6);
+            _barSettingsButton.Visibility = Visibility.Visible;
             _titleText.FontSize = BarTitleFontSize;
             _titleIcon.Width = BarIconSize;
             _titleIcon.Height = BarIconSize;
@@ -459,6 +524,11 @@ public sealed partial class MainWindow : Window
             _actionsPanel.Visibility = Visibility.Visible;
             _footerPanel.Visibility = Visibility.Visible;
             _searchBox.Margin = new Thickness(0, 12, 0, 10);
+            _barSettingsButton.Margin = new Thickness(0, 12, BarSettingsButtonGap, 10);
+            // The header's own Settings button is on screen in these layouts; a second gear beside
+            // the search box would just be the same affordance twice. Collapsed also means column 0
+            // measures to zero, so the search box keeps the full row width it has today.
+            _barSettingsButton.Visibility = Visibility.Collapsed;
             _titleText.FontSize = HeaderTitleFontSize;
             _titleIcon.Width = HeaderIconSize;
             _titleIcon.Height = HeaderIconSize;
@@ -485,7 +555,11 @@ public sealed partial class MainWindow : Window
     private void ApplyLocalizedTexts()
     {
         _clearButton.Content = T("Clear", "清空");
-        _settingsButton.Content = T("Settings", "设置");
+        var settingsLabel = T("Settings", "设置");
+        _settingsButton.Content = settingsLabel;
+        // The gear carries no caption, so the tooltip and the accessible name are its only label.
+        ToolTipService.SetToolTip(_barSettingsButton, settingsLabel);
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(_barSettingsButton, settingsLabel);
         _searchBox.PlaceholderText = T("Search text, URL, file path or source app", "搜索文本、链接、文件路径或来源应用");
         var hotkey = HotKeyDisplay;
         _helpText.Text = T(
@@ -1666,7 +1740,16 @@ public sealed partial class MainWindow : Window
         _lastAppliedRect = rect;
     }
 
-    private async void Clear_Click(object sender, RoutedEventArgs e)
+    /// <summary>Shared by the header button and the bar-layout gear.</summary>
+    private void Settings_Click(object sender, RoutedEventArgs e) => ShowSettingsWindow();
+
+    private async void Clear_Click(object sender, RoutedEventArgs e) => await ConfirmAndClearAsync();
+
+    /// <summary>
+    /// Also reached from the tray menu via <see cref="ConfirmAndClearFromTrayAsync"/>, so the
+    /// confirmation and the clear stay together in one place.
+    /// </summary>
+    private async Task ConfirmAndClearAsync()
     {
         // Re-entry would throw: WinUI allows only one ContentDialog per XamlRoot at a time.
         if (_confirmingClear)
@@ -1677,7 +1760,35 @@ public sealed partial class MainWindow : Window
         if (await ConfirmClearAsync())
         {
             await ViewModel.ClearAllAsync();
-            _statusText.Text = T("History cleared.", "历史已清空。");
+            _statusText.Text = ClearHistoryPrompt.Done(IsChinese);
+        }
+    }
+
+    /// <summary>
+    /// Clear invoked from the tray menu, which has no XamlRoot of its own. Rather than a second
+    /// confirmation mechanism, the panel is brought on screen and asked with the very same dialog:
+    /// a ContentDialog renders inside its host window, and the panel spends most of its life parked
+    /// off-screen, so confirming without showing it would put the question where the user cannot
+    /// see or answer it.
+    ///
+    /// Safe to call from the tray: the menu command is dispatched after TrackPopupMenu's modal loop
+    /// has already exited, so this never runs nested inside it.
+    /// </summary>
+    public async Task ConfirmAndClearFromTrayAsync()
+    {
+        try
+        {
+            if (!_isVisible)
+            {
+                ShowMainWindowInternal(T("Confirm clearing the history.", "请确认是否清空历史。"));
+            }
+
+            await ConfirmAndClearAsync();
+        }
+        catch (Exception ex)
+        {
+            // Nobody awaits this, so an escaping exception would surface as an unobserved task.
+            AppLog.Error("Clearing the history from the tray failed.", ex);
         }
     }
 
@@ -1693,23 +1804,23 @@ public sealed partial class MainWindow : Window
         {
             XamlRoot = _root.XamlRoot,
             RequestedTheme = _root.ActualTheme,
-            Title = T("Clear clipboard history?", "确定清空剪贴板历史？"),
+            Title = ClearHistoryPrompt.Title(IsChinese),
             // No item count: the header count reflects the current search filter and the history
-            // limit, while clearing always removes every row.
+            // limit, while clearing always removes every unpinned row.
             Content = new TextBlock
             {
-                Text = T("Every item, including pinned ones, is permanently deleted. This cannot be undone.",
-                         "全部记录（包含已置顶的）将被永久删除，且无法恢复。"),
+                Text = ClearHistoryPrompt.Body(IsChinese),
                 TextWrapping = TextWrapping.Wrap,
                 Foreground = ThemeBrushes.PrimaryText
             },
-            PrimaryButtonText = T("Clear", "清空"),
-            CloseButtonText = T("Cancel", "取消"),
+            PrimaryButtonText = ClearHistoryPrompt.Confirm(IsChinese),
+            CloseButtonText = ClearHistoryPrompt.Cancel(IsChinese),
             // Enter and Esc both have to land on the non-destructive choice.
             DefaultButton = ContentDialogButton.Close
         };
 
         _confirmingClear = true;
+        _clearDialog = dialog;
         try
         {
             return await dialog.ShowAsync() == ContentDialogResult.Primary;
@@ -1723,6 +1834,7 @@ public sealed partial class MainWindow : Window
         finally
         {
             _confirmingClear = false;
+            _clearDialog = null;
         }
     }
 
@@ -1732,6 +1844,16 @@ public sealed partial class MainWindow : Window
         // the panel underneath it, and Enter must not reach the history list.
         if (_confirmingClear)
         {
+            // Normally the dialog has focus and cancels itself on Esc. In the moments right after
+            // it opens focus can still be sitting in the panel, and then Esc would reach this
+            // handler instead and do nothing at all. Cancelling explicitly means Esc is never a
+            // no-op while a destructive prompt is on screen.
+            if (e.Key == VirtualKey.Escape)
+            {
+                _clearDialog?.Hide();
+                e.Handled = true;
+            }
+
             return;
         }
 

@@ -253,12 +253,15 @@ public sealed class ClipboardViewModel : INotifyPropertyChanged
         return Items.Count;
     }
 
+    /// <summary>
+    /// Clears the unpinned history. The list is reloaded rather than emptied, because pinned rows
+    /// survive the delete and have to stay on screen; clearing the collection outright would show
+    /// an empty panel that disagrees with the database until the next refresh.
+    /// </summary>
     public async Task ClearAllAsync()
     {
         await _database.ClearAsync();
-        Items.Clear();
-        SelectedItem = null;
-        OnPropertyChanged(nameof(ItemCountText));
+        await RefreshAsync();
     }
 
     public void MoveSelection(int delta)

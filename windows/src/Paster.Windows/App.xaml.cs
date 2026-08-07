@@ -109,7 +109,9 @@ public partial class App : Application
                 (english, chinese) => Localize(settings, english, chinese),
                 shown,
                 () => _window.ShowMainWindow(Localize(settings, "Paster is running from the system tray.", "Paster 正在系统托盘中运行。")),
-                () => _ = viewModel.ClearAllAsync(),
+                // Routed through the panel so the tray shares its confirmation dialog instead of
+                // deleting on a single click.
+                () => _ = _window.ConfirmAndClearFromTrayAsync(),
                 () => _window.ShowSettingsWindow(),
                 Quit);
             AppLog.Info("Tray icon created.");

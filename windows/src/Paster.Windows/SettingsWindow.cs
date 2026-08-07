@@ -41,6 +41,8 @@ public sealed class SettingsWindow : Window
     private readonly TextBlock _statusText = new();
     private readonly HotKeyService? _hotKeys;
     private readonly Button _hotKeyButton = new();
+    private readonly Button _clearHistoryButton = new();
+    private bool _confirmingClear;
     private bool _recordingHotKey;
     private bool _suppressLaunchAtLoginToggle;
     private bool IsChinese => _settings.Language == AppLanguage.ChineseSimplified ||
@@ -213,17 +215,13 @@ public sealed class SettingsWindow : Window
             }
         };
 
-        var clear = new Button { Content = T("Clear All History", "清空全部历史") };
-        clear.Click += async (_, _) =>
-        {
-            await _viewModel.ClearAllAsync();
-            _statusText.Text = T("History cleared.", "历史已清空。");
-        };
+        _clearHistoryButton.Content = T("Clear All History", "清空全部历史");
+        _clearHistoryButton.Click += async (_, _) => await ConfirmAndClearAsync();
 
         panel.Children.Add(Section(T("History", "历史"), new UIElement[]
         {
             LabeledControl(T("Limit", "上限"), _historyLimitBox),
-            clear
+            _clearHistoryButton
         }));
 
         panel.Children.Add(Section(T("About", "关于"), new UIElement[]
@@ -264,6 +262,62 @@ public sealed class SettingsWindow : Window
         panel.Children.Add(_statusText);
 
         return root;
+    }
+
+    /// <summary>
+    /// Confirms before clearing, matching the panel's dialog word for word via
+    /// <see cref="ClearHistoryPrompt"/>. Cancel is the default button, so Enter and Esc both back
+    /// out and only a deliberate click on the confirm button deletes anything.
+    /// </summary>
+    private async Task ConfirmAndClearAsync()
+    {
+        // Re-entry would throw: WinUI allows only one ContentDialog per XamlRoot at a time.
+        if (_confirmingClear)
+        {
+            return;
+        }
+
+        var dialog = new ContentDialog
+        {
+            XamlRoot = _clearHistoryButton.XamlRoot,
+            RequestedTheme = _clearHistoryButton.ActualTheme,
+            Title = ClearHistoryPrompt.Title(IsChinese),
+            Content = new TextBlock
+            {
+                Text = ClearHistoryPrompt.Body(IsChinese),
+                TextWrapping = TextWrapping.Wrap,
+                Foreground = ThemeBrushes.PrimaryText
+            },
+            PrimaryButtonText = ClearHistoryPrompt.Confirm(IsChinese),
+            CloseButtonText = ClearHistoryPrompt.Cancel(IsChinese),
+            DefaultButton = ContentDialogButton.Close
+        };
+
+        _confirmingClear = true;
+        ContentDialogResult result;
+        try
+        {
+            result = await dialog.ShowAsync();
+        }
+        catch (Exception ex)
+        {
+            // Treat an unshowable dialog as a cancel: losing the confirmation must never mean
+            // silently deleting the history instead.
+            AppLog.Error("Could not show the clear-history confirmation.", ex);
+            return;
+        }
+        finally
+        {
+            _confirmingClear = false;
+        }
+
+        if (result != ContentDialogResult.Primary)
+        {
+            return;
+        }
+
+        await _viewModel.ClearAllAsync();
+        _statusText.Text = ClearHistoryPrompt.Done(IsChinese);
     }
 
     /// <summary>

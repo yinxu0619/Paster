@@ -213,11 +213,15 @@ public sealed class ClipboardDatabase
         await command.ExecuteNonQueryAsync();
     }
 
+    /// <summary>
+    /// Clears the history but keeps pinned rows: pinning is the user's "keep this" marker, so a
+    /// clear that discarded pinned items would throw away the entries they deliberately protected.
+    /// </summary>
     public async Task ClearAsync()
     {
         await using var connection = OpenConnection();
         var command = connection.CreateCommand();
-        command.CommandText = "DELETE FROM ClipboardItems";
+        command.CommandText = "DELETE FROM ClipboardItems WHERE IsPinned = 0";
         await command.ExecuteNonQueryAsync();
     }
 
