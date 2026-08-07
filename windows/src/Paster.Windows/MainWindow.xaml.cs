@@ -115,6 +115,12 @@ public sealed partial class MainWindow : Window
     private bool _windowShownOnce;
     private bool _isVisible;
 
+    /// <summary>
+    /// True while the clear-history confirmation is up. The panel parks itself off-screen on focus
+    /// loss, on Esc and on the hotkey, any of which would take the open dialog with it.
+    /// </summary>
+    private bool _confirmingClear;
+
     private bool IsBarLayout => _settings.PanelPosition is PanelPosition.Bottom or PanelPosition.Top;
     private bool IsChinese => _settings.Language == AppLanguage.ChineseSimplified ||
                               (_settings.Language == AppLanguage.System &&
@@ -232,6 +238,12 @@ public sealed partial class MainWindow : Window
     public void TogglePanel(IntPtr targetWindow)
     {
         AppLog.Trace($"TogglePanel invoked. IsVisible={_isVisible}.");
+        if (_confirmingClear)
+        {
+            // Parking the panel now would hide the dialog without answering it.
+            return;
+        }
+
         if (_isVisible)
         {
             HidePanel();
@@ -1426,7 +1438,7 @@ public sealed partial class MainWindow : Window
         // Auto-hide on focus loss regardless of how the panel was opened. Previously only hotkey
         // sessions did this, so a tray- or startup-opened panel stayed behind whatever the user
         // clicked next instead of getting out of the way.
-        if (!_isVisible || _settingsWindow is not null)
+        if (!_isVisible || _settingsWindow is not null || _confirmingClear)
         {
             return;
         }
@@ -1654,10 +1666,75 @@ public sealed partial class MainWindow : Window
         _lastAppliedRect = rect;
     }
 
-    private async void Clear_Click(object sender, RoutedEventArgs e) => await ViewModel.ClearAllAsync();
+    private async void Clear_Click(object sender, RoutedEventArgs e)
+    {
+        // Re-entry would throw: WinUI allows only one ContentDialog per XamlRoot at a time.
+        if (_confirmingClear)
+        {
+            return;
+        }
+
+        if (await ConfirmClearAsync())
+        {
+            await ViewModel.ClearAllAsync();
+            _statusText.Text = T("History cleared.", "历史已清空。");
+        }
+    }
+
+    /// <summary>
+    /// Confirmation for the one irreversible action in the header, which sits a few dozen pixels
+    /// from the settings button. Hosted in the panel's own XamlRoot rather than in a separate
+    /// window: a second window would deactivate the panel and trip its auto-hide, and would have
+    /// to fight the panel for the topmost band.
+    /// </summary>
+    private async Task<bool> ConfirmClearAsync()
+    {
+        var dialog = new ContentDialog
+        {
+            XamlRoot = _root.XamlRoot,
+            RequestedTheme = _root.ActualTheme,
+            Title = T("Clear clipboard history?", "确定清空剪贴板历史？"),
+            // No item count: the header count reflects the current search filter and the history
+            // limit, while clearing always removes every row.
+            Content = new TextBlock
+            {
+                Text = T("Every item, including pinned ones, is permanently deleted. This cannot be undone.",
+                         "全部记录（包含已置顶的）将被永久删除，且无法恢复。"),
+                TextWrapping = TextWrapping.Wrap,
+                Foreground = ThemeBrushes.PrimaryText
+            },
+            PrimaryButtonText = T("Clear", "清空"),
+            CloseButtonText = T("Cancel", "取消"),
+            // Enter and Esc both have to land on the non-destructive choice.
+            DefaultButton = ContentDialogButton.Close
+        };
+
+        _confirmingClear = true;
+        try
+        {
+            return await dialog.ShowAsync() == ContentDialogResult.Primary;
+        }
+        catch (Exception ex)
+        {
+            // Never fall through to clearing: an unshowable dialog means unconfirmed intent.
+            AppLog.Error("Could not show the clear-history confirmation.", ex);
+            return false;
+        }
+        finally
+        {
+            _confirmingClear = false;
+        }
+    }
 
     private async void Root_KeyDown(object sender, KeyRoutedEventArgs e)
     {
+        // The confirmation owns the keyboard while it is up: Esc has to close it rather than hide
+        // the panel underneath it, and Enter must not reach the history list.
+        if (_confirmingClear)
+        {
+            return;
+        }
+
         var ctrl = IsKeyDown(VirtualKey.Control);
         var shift = IsKeyDown(VirtualKey.Shift);
         AppLog.Trace($"Root_KeyDown key={e.Key} alreadyHandled={e.Handled} searchLength={_searchBox.Text?.Length ?? 0}");
