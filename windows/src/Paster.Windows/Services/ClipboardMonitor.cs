@@ -46,6 +46,15 @@ public sealed class ClipboardMonitor : MessageWindow
     {
         if (message == NativeMethods.WmClipboardUpdate)
         {
+            // Tested here rather than inside the recorder: this runs on the message loop while the
+            // clipboard still reflects the change that raised the message, whereas the recorder
+            // queues behind _recordGate and can start arbitrarily later.
+            if (ClipboardSelfChangeGuard.IsSelfWrite())
+            {
+                AppLog.Trace("Ignored a clipboard update that Paster itself wrote.");
+                return IntPtr.Zero;
+            }
+
             _ = RecordCurrentClipboardAsync();
             return IntPtr.Zero;
         }
@@ -83,11 +92,6 @@ public sealed class ClipboardMonitor : MessageWindow
 
     private async Task RecordCurrentClipboardCoreAsync()
     {
-        if (ClipboardSelfChangeGuard.ConsumeIfSelfWrite())
-        {
-            return;
-        }
-
         var sourceWindow = NativeMethods.GetForegroundWindow();
         var sourcePath = NativeMethods.GetProcessPathFromWindow(sourceWindow);
         if (_settings.IsExcluded(sourcePath))

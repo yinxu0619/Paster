@@ -193,6 +193,9 @@ internal static partial class NativeMethods
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool RemoveClipboardFormatListener(IntPtr hwnd);
 
+    [LibraryImport("user32.dll")]
+    public static partial IntPtr GetClipboardOwner();
+
     [LibraryImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
