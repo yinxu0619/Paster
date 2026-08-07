@@ -116,10 +116,27 @@ final class AppSettings: ObservableObject {
         appLanguage = AppLanguage(rawValue: defaults.string(forKey: Keys.appLanguage) ?? "") ?? .system
     }
 
-    /// 恢复默认呼出热键（⌘⇧V）。
-    func resetHotKeyToDefault() {
-        hotKeyCode = Self.defaultHotKeyCode
-        hotKeyModifiers = Self.defaultHotKeyModifiers
+    /// 尝试把呼出热键改为新组合：先用新组合去注册系统级热键，成功才落盘持久化；
+    /// 若失败（通常是被其它应用占用），自动回滚注册回旧组合，确保面板呼出入口
+    /// 不会因为一次失败的改键操作而彻底失效。返回是否成功，供设置界面提示用户。
+    @discardableResult
+    func updateHotKey(keyCode: UInt32, modifiers: UInt32) -> Bool {
+        guard keyCode != hotKeyCode || modifiers != hotKeyModifiers else { return true }
+        let previousCode = hotKeyCode
+        let previousModifiers = hotKeyModifiers
+        guard HotKeyManager.shared.register(keyCode: keyCode, modifiers: modifiers) else {
+            HotKeyManager.shared.register(keyCode: previousCode, modifiers: previousModifiers)
+            return false
+        }
+        hotKeyCode = keyCode
+        hotKeyModifiers = modifiers
+        return true
+    }
+
+    /// 恢复默认呼出热键（⌘⇧V）。若默认组合恰好也被占用（少见），保留当前热键不变。
+    @discardableResult
+    func resetHotKeyToDefault() -> Bool {
+        updateHotKey(keyCode: Self.defaultHotKeyCode, modifiers: Self.defaultHotKeyModifiers)
     }
 
     /// 当前热键的可读描述，如 "⌘⇧V"。

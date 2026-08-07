@@ -53,10 +53,11 @@ final class ClipboardViewModel: ObservableObject {
         try? context.save()
     }
 
-    /// 一键清空全部历史（第 4 轮新增）。
+    /// 一键清空全部历史，保留置顶记录（第 4 轮新增；置顶本身就是用户特意标记
+    /// 「要留着」的内容，一并删除等于丢弃用户特意保护的记录）。
     func clearAll() {
         do {
-            try context.delete(model: ClipboardItem.self)
+            try context.delete(model: ClipboardItem.self, where: #Predicate { $0.isPinned == false })
             try context.save()
         } catch {
             NSLog("[Paster] 清空历史失败: \(error.localizedDescription)")

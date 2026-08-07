@@ -12,6 +12,8 @@ struct PanelActions {
     var preview: (ClipboardItem) -> Void
     /// 第 6 轮新增：关闭/收起面板（Esc）。
     var dismiss: () -> Void
+    /// 打开设置窗口，供横向条布局下的齿轮入口使用（该布局没有标题栏可放按钮）。
+    var openSettings: () -> Void
 }
 
 /// 单条剪贴板记录的卡片视图。

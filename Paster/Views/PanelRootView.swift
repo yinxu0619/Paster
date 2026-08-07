@@ -240,6 +240,13 @@ struct PanelRootView: View {
                           focus: $searchFocused,
                           onKey: handleKeyPress)
                 .frame(maxWidth: 360)
+            // 横向条布局折叠了标题栏，没有别处能进入设置，这里补一个齿轮入口。
+            Button { actions.openSettings() } label: {
+                Image(systemName: "gearshape")
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+            .help(L10n.tr("menu.settings"))
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 8)

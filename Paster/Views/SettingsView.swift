@@ -8,6 +8,8 @@ struct SettingsView: View {
     @StateObject private var viewModel = SettingsViewModel()
 
     @State private var showingClearConfirm = false
+    /// 热键注册失败时的提示（通常是组合键已被其它应用占用）；成功或重新打开录制时清空。
+    @State private var hotKeyError: String?
 
     var body: some View {
         TabView {
@@ -43,9 +45,21 @@ struct SettingsView: View {
                     Text(L10n.tr("settings.showPanel"))
                     Spacer()
                     HotKeyRecorder(keyCode: $settings.hotKeyCode, modifiers: $settings.hotKeyModifiers,
-                                   languageToken: settings.appLanguage.rawValue)
-                        .frame(width: 150, height: 24)
-                    Button(L10n.tr("settings.resetDefault")) { settings.resetHotKeyToDefault() }
+                                   languageToken: settings.appLanguage.rawValue) { code, mods in
+                        let ok = settings.updateHotKey(keyCode: code, modifiers: mods)
+                        hotKeyError = ok ? nil : L10n.tr("settings.hotkeyConflict")
+                        return ok
+                    }
+                    .frame(width: 150, height: 24)
+                    Button(L10n.tr("settings.resetDefault")) {
+                        let ok = settings.resetHotKeyToDefault()
+                        hotKeyError = ok ? nil : L10n.tr("settings.hotkeyConflict")
+                    }
+                }
+                if let hotKeyError {
+                    Text(hotKeyError)
+                        .font(.caption)
+                        .foregroundStyle(.red)
                 }
                 Text(L10n.tr("settings.hotkeyHint"))
                     .font(.caption)

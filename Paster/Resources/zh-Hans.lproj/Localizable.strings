@@ -17,6 +17,7 @@
 "settings.showPanel" = "呼出面板";
 "settings.resetDefault" = "恢复默认";
 "settings.hotkeyHint" = "点击右侧按钮后按下新的组合键（需包含 ⌘ / ⌥ / ⌃ 之一），按 Esc 取消。";
+"settings.hotkeyConflict" = "该组合键已被其它应用占用，已保留原快捷键，请换一个组合。";
 "settings.plainPaste" = "无格式粘贴";
 "settings.plainPasteHint" = "在面板中选中条目后，按该组合键直接以纯文本（去除格式）粘贴；普通回车为保留格式粘贴。";
 "settings.panelPosition" = "呼出位置";
@@ -32,7 +33,7 @@
 "settings.historyLimitCount" = "%d 条";
 "settings.historyLimitHint" = "超出上限时会自动删除最旧的未固定记录，固定项不受影响。";
 "settings.clearAllHistory" = "清空全部历史";
-"settings.clearConfirm" = "确定要清空全部剪贴板历史吗？此操作不可恢复。";
+"settings.clearConfirm" = "确定要清空剪贴板历史吗？置顶记录会保留，此操作不可恢复。";
 "settings.clear" = "清空全部";
 "settings.cancel" = "取消";
 
@@ -102,8 +103,8 @@
 "menu.settingsWindowTitle" = "Paster 设置";
 
 /* Alerts */
-"alert.clearTitle" = "清空全部剪贴板历史？";
-"alert.clearMessage" = "此操作不可恢复。";
+"alert.clearTitle" = "清空剪贴板历史？";
+"alert.clearMessage" = "置顶记录会保留，此操作不可恢复。";
 "alert.accessibilityTitle" = "需要「辅助功能」权限";
 "alert.accessibilityMessage" = "Paster 通过模拟 ⌘V 自动粘贴，这需要\"辅助功能\"权限。\n\n请在 系统设置 › 隐私与安全性 › 辅助功能 中勾选 Paster，然后重试。\n\n提示：每次重新打包后签名会变化，系统可能要求重新授权——如果列表里已有旧的 Paster，请先用「−」移除，再重新添加这一份。\n\n（内容已复制到剪贴板，你也可以直接在目标应用按 ⌘V 粘贴。）";
 "alert.openAccessibility" = "打开辅助功能设置";

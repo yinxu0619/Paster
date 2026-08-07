@@ -13,10 +13,10 @@ final class SettingsViewModel: ObservableObject {
         refreshRunningApps()
     }
 
-    /// 一键清空全部历史。
+    /// 一键清空全部历史，保留置顶记录（与 `ClipboardViewModel.clearAll` 语义一致）。
     func clearAllHistory() {
         do {
-            try context.delete(model: ClipboardItem.self)
+            try context.delete(model: ClipboardItem.self, where: #Predicate { $0.isPinned == false })
             try context.save()
         } catch {
             NSLog("[Paster] 清空历史失败: \(error.localizedDescription)")

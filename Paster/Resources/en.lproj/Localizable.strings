@@ -17,6 +17,7 @@
 "settings.showPanel" = "Show Panel";
 "settings.resetDefault" = "Reset to Default";
 "settings.hotkeyHint" = "Click the button, then press a new shortcut (must include ⌘, ⌥, or ⌃). Press Esc to cancel.";
+"settings.hotkeyConflict" = "That shortcut is already used by another app. Your previous shortcut was kept — please choose a different combination.";
 "settings.plainPaste" = "Plain Text Paste";
 "settings.plainPasteHint" = "With an item selected in the panel, use this shortcut to paste as plain text. Return keeps formatting.";
 "settings.panelPosition" = "Panel Position";
@@ -32,7 +33,7 @@
 "settings.historyLimitCount" = "%d items";
 "settings.historyLimitHint" = "When the limit is exceeded, oldest unpinned items are removed. Pinned items are kept.";
 "settings.clearAllHistory" = "Clear All History";
-"settings.clearConfirm" = "Clear all clipboard history? This cannot be undone.";
+"settings.clearConfirm" = "Clear clipboard history? Pinned items will be kept. This cannot be undone.";
 "settings.clear" = "Clear All";
 "settings.cancel" = "Cancel";
 
@@ -102,8 +103,8 @@
 "menu.settingsWindowTitle" = "Paster Settings";
 
 /* Alerts */
-"alert.clearTitle" = "Clear all clipboard history?";
-"alert.clearMessage" = "This cannot be undone.";
+"alert.clearTitle" = "Clear clipboard history?";
+"alert.clearMessage" = "Pinned items will be kept. This cannot be undone.";
 "alert.accessibilityTitle" = "Accessibility Permission Required";
 "alert.accessibilityMessage" = "Paster simulates ⌘V to paste automatically, which requires Accessibility permission.\n\nOpen System Settings › Privacy & Security › Accessibility, enable Paster, then try again.\n\nNote: Rebuilding the app changes its signature. If an old Paster entry exists, remove it with \"−\" and add this build again.\n\n(Content is already on the clipboard — you can also press ⌘V in the target app.)";
 "alert.openAccessibility" = "Open Accessibility Settings";

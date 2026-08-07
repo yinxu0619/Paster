@@ -6,7 +6,9 @@ import AppKit
 final class HotKeyRecorderButton: NSButton {
     private(set) var carbonKeyCode: UInt32 = 9
     private(set) var carbonModifiers: UInt32 = 768
-    var onChange: ((UInt32, UInt32) -> Void)?
+    /// 捕获到新组合时调用，由外部尝试注册并返回是否成功；
+    /// 失败（通常是被其它应用占用）时按钮回退显示旧组合，不采用新值。
+    var onCapture: ((UInt32, UInt32) -> Bool)?
 
     private var isRecording = false
     private var eventMonitor: Any?
@@ -74,9 +76,12 @@ final class HotKeyRecorderButton: NSButton {
         // 必须包含主修饰键，否则忽略，继续等待。
         guard KeyCodeTranslator.hasPrimaryModifier(carbon) else { return }
 
-        carbonKeyCode = UInt32(event.keyCode)
-        carbonModifiers = carbon
-        onChange?(carbonKeyCode, carbonModifiers)
+        let newCode = UInt32(event.keyCode)
+        // 只有注册成功才采用新组合；失败则保留旧值，refreshTitle() 会显示回原来的组合。
+        if onCapture?(newCode, carbon) ?? true {
+            carbonKeyCode = newCode
+            carbonModifiers = carbon
+        }
         stopRecording()
     }
 
@@ -91,22 +96,18 @@ struct HotKeyRecorder: NSViewRepresentable {
     @Binding var modifiers: UInt32
     /// 语言切换时触发 `updateNSView`，刷新录制占位文案。
     var languageToken: String = ""
+    /// 捕获到新组合时尝试应用；返回是否成功，供按钮据此决定是否采用新显示。
+    var onCapture: (UInt32, UInt32) -> Bool
 
     func makeNSView(context: Context) -> HotKeyRecorderButton {
         let button = HotKeyRecorderButton()
         button.configure(keyCode: keyCode, modifiers: modifiers)
-        button.onChange = { code, mods in
-            keyCode = code
-            modifiers = mods
-        }
+        button.onCapture = onCapture
         return button
     }
 
     func updateNSView(_ nsView: HotKeyRecorderButton, context: Context) {
-        nsView.onChange = { code, mods in
-            keyCode = code
-            modifiers = mods
-        }
+        nsView.onCapture = onCapture
         nsView.configure(keyCode: keyCode, modifiers: modifiers)
     }
 }

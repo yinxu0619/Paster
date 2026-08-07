@@ -17,8 +17,11 @@ final class HotKeyManager {
     private init() {}
 
     /// 注册全局热键，默认 ⌘⇧V。
+    /// 返回是否注册成功（例如组合键已被其它应用占用时会失败），
+    /// 调用方据此决定是否回滚到上一组可用组合，避免把用户锁在面板之外。
+    @discardableResult
     func register(keyCode: UInt32 = UInt32(kVK_ANSI_V),
-                  modifiers: UInt32 = UInt32(cmdKey | shiftKey)) {
+                  modifiers: UInt32 = UInt32(cmdKey | shiftKey)) -> Bool {
         unregister()
 
         var eventType = EventTypeSpec(eventClass: OSType(kEventClassKeyboard),
@@ -33,7 +36,8 @@ final class HotKeyManager {
         InstallEventHandler(GetApplicationEventTarget(), callback, 1, &eventType, nil, &eventHandlerRef)
 
         let hotKeyID = EventHotKeyID(signature: HotKeyManager.signature, id: 1)
-        RegisterEventHotKey(keyCode, modifiers, hotKeyID, GetApplicationEventTarget(), 0, &hotKeyRef)
+        let status = RegisterEventHotKey(keyCode, modifiers, hotKeyID, GetApplicationEventTarget(), 0, &hotKeyRef)
+        return status == noErr && hotKeyRef != nil
     }
 
     /// 注销热键与事件处理器。

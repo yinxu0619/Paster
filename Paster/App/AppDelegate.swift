@@ -53,7 +53,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func registerHotKeyFromSettings() {
         let settings = AppSettings.shared
-        HotKeyManager.shared.register(keyCode: settings.hotKeyCode, modifiers: settings.hotKeyModifiers)
+        let ok = HotKeyManager.shared.register(keyCode: settings.hotKeyCode, modifiers: settings.hotKeyModifiers)
+        guard !ok else { return }
+        // 保存的组合注册失败（例如上次运行后被其它应用占用）：回退到默认组合，
+        // 避免用户彻底失去呼出入口；界面上仍显示原设置，用户可在设置里另选一个。
+        NSLog("[Paster] 热键 \(settings.hotKeyDescription) 注册失败，已临时回退到默认组合。")
+        let isAlreadyDefault = settings.hotKeyCode == AppSettings.defaultHotKeyCode
+            && settings.hotKeyModifiers == AppSettings.defaultHotKeyModifiers
+        if !isAlreadyDefault {
+            HotKeyManager.shared.register(keyCode: AppSettings.defaultHotKeyCode,
+                                          modifiers: AppSettings.defaultHotKeyModifiers)
+        }
     }
 
     @objc private func hotKeyDidChange() {
@@ -166,7 +176,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             delete: { [weak self] item in self?.viewModel?.delete(item) },
             togglePin: { [weak self] item in self?.viewModel?.togglePin(item) },
             preview: { [weak self] item in self?.showPreview(item) },
-            dismiss: { [weak self] in self?.hidePanel() }
+            dismiss: { [weak self] in self?.hidePanel() },
+            openSettings: { [weak self] in
+                self?.hidePanel()
+                self?.openSettings()
+            }
         )
         self.panelActions = actions
 
