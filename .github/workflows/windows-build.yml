@@ -1,0 +1,92 @@
+name: Windows build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'windows/**'
+      - '.github/workflows/windows-build.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'windows/**'
+      - '.github/workflows/windows-build.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-build-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+  DOTNET_NOLOGO: '1'
+
+jobs:
+  build:
+    name: Test and package Windows x64
+    runs-on: windows-2022
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: windows
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Install .NET 8 SDK
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Run core regression checks
+        run: |
+          New-Item -ItemType Directory -Force -Path artifacts/logs | Out-Null
+          dotnet --info
+          dotnet run --project tests/Core/Paster.Core.Tests.csproj --configuration Release 2>&1 |
+            Tee-Object -FilePath artifacts/logs/core-tests.log
+          if ($LASTEXITCODE -ne 0) { throw "Core regression checks failed ($LASTEXITCODE)." }
+
+      - name: Compile Windows services
+        run: |
+          dotnet build tests/PlatformCheck/Paster.PlatformCheck.csproj --configuration Release 2>&1 |
+            Tee-Object -FilePath artifacts/logs/platform-check.log
+          if ($LASTEXITCODE -ne 0) { throw "Windows service compilation failed ($LASTEXITCODE)." }
+
+      - name: Publish self-contained WinUI app
+        run: ./scripts/publish-unpackaged.ps1 -Configuration Release
+
+      - name: Verify published app startup
+        timeout-minutes: 2
+        run: ./scripts/smoke-test.ps1
+
+      # Upload the whole publish directory so the downloaded artifact ZIP contains
+      # the EXE together with .NET, Windows App SDK and all content dependencies.
+      - name: Upload Windows package
+        id: package
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: Paster-Windows-x64
+          path: windows/artifacts/publish/Paster.Windows-win-x64/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Add download link to build summary
+        env:
+          PACKAGE_URL: ${{ steps.package.outputs.artifact-url }}
+        run: |
+          "Download [Paster-Windows-x64.zip]($env:PACKAGE_URL), extract the entire ZIP, then run Paster.Windows.exe." >> $env:GITHUB_STEP_SUMMARY
+
+      - name: Upload diagnostic logs
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: Windows-build-logs
+          path: windows/artifacts/logs/
+          if-no-files-found: ignore
+          retention-days: 14

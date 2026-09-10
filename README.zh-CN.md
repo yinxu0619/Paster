@@ -28,6 +28,15 @@
 4. 应用以**系统托盘图标**常驻（无任务栏窗口），按 `Alt+C` 呼出面板，或左键点击托盘图标
 5. 退出方式：右键托盘图标 → 「**退出 Paster**」
 
+## Windows 自动构建
+
+进入 [Actions → Windows build](https://github.com/yinxu0619/Paster/actions/workflows/windows-build.yml)，
+选择成功的构建，在 **Artifacts** 中下载 **Paster-Windows-x64**（需登录 GitHub）。
+完整解压 ZIP 后运行 `Paster.Windows.exe`，无需自行安装 .NET。
+
+修改 Windows 代码并推送到 `main`、提交相关 PR 时会自动构建，也支持点击 **Run workflow** 手动触发。
+流程包括回归测试、完整 WinUI 编译、自包含打包和启动检查。构建包保留 30 天，不会自动发布到 Releases。
+
 ## 截图
 
 **演示动图** — 横向平铺条实际操作（滚动、选择、粘贴）：

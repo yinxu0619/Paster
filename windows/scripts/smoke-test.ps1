@@ -23,30 +23,41 @@ if (Test-Path $appLog) {
     Remove-Item $appLog -Force
 }
 
-$process = Start-Process -FilePath $exe -PassThru
-"Started process id: $($process.Id)" | Out-File -FilePath $smokeLog -Encoding utf8 -Append
-Start-Sleep -Seconds 20
-
-$running = Get-Process -Id $process.Id -ErrorAction SilentlyContinue
-if (-not $running) {
-    throw "Paster.Windows exited during startup. Check Windows Event Viewer and $appLog."
-}
-
-if (Test-Path $appLog) {
-    "Application log:" | Out-File -FilePath $smokeLog -Encoding utf8 -Append
-    Get-Content $appLog | Out-File -FilePath $smokeLog -Encoding utf8 -Append
-}
-else {
-    throw "Paster.Windows is running, but app log was not created: $appLog"
-}
-
+$process = $null
 try {
-    Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
-    "Stopped process id: $($process.Id)" | Out-File -FilePath $smokeLog -Encoding utf8 -Append
-}
-catch {
-    "Failed to stop process id: $($process.Id) - $($_.Exception.Message)" | Out-File -FilePath $smokeLog -Encoding utf8 -Append
-}
+    $process = Start-Process -FilePath $exe -PassThru
+    "Started process id: $($process.Id)" | Out-File -FilePath $smokeLog -Encoding utf8 -Append
+    Start-Sleep -Seconds 20
 
-Write-Host "Smoke test passed. Process is running: $($process.Id)" -ForegroundColor Green
-Write-Host "Log: $smokeLog"
+    if ($process.HasExited) {
+        throw "Paster.Windows exited during startup (exit code $($process.ExitCode)). Check $smokeLog."
+    }
+    if (-not (Test-Path $appLog)) {
+        throw "Paster.Windows is running, but its app log was not created."
+    }
+    $log = Get-Content $appLog -Raw
+    if ($log -notmatch 'Tray icon created\.') {
+        throw "Paster.Windows did not complete initialization. Check $smokeLog."
+    }
+    if ($log -match 'Fatal startup failure|Unhandled WinUI exception') {
+        throw "Paster.Windows reported a startup error. Check $smokeLog."
+    }
+    "Smoke test passed: startup completed and the process stayed alive for 20 seconds." |
+        Out-File -FilePath $smokeLog -Encoding utf8 -Append
+    Write-Host "Smoke test passed." -ForegroundColor Green
+}
+finally {
+    if ($null -ne $process) {
+        if (-not $process.HasExited) {
+            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+            $process.WaitForExit(5000) | Out-Null
+        }
+        $process.Dispose()
+    }
+    if (Test-Path $appLog) {
+        Copy-Item $appLog (Join-Path $smokeLogDir "paster.log") -Force
+        "Application log:" | Out-File -FilePath $smokeLog -Encoding utf8 -Append
+        Get-Content $appLog | Out-File -FilePath $smokeLog -Encoding utf8 -Append
+    }
+    Write-Host "Log: $smokeLog"
+}

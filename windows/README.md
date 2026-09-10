@@ -81,6 +81,26 @@ windows\artifacts\publish\Paster.Windows-win-x64\Paster.Windows.exe
 
 This publish path uses `--self-contained true` and `WindowsAppSDKSelfContained=true` so the folder is suitable for unpackaged debugging and sharing as a zip during development. Keep all files in the publish folder together when running the exe.
 
+## GitHub Actions Builds
+
+[Windows build](https://github.com/yinxu0619/Paster/actions/workflows/windows-build.yml)
+compiles the complete WinUI application on a Windows Server 2022 runner. It runs automatically
+for changes under `windows/` (or to the workflow itself) pushed to `main` and for pull requests
+into `main`. You can also select **Run workflow** on the Actions page.
+
+Each successful run provides a **Paster-Windows-x64** artifact. Download it from the run's
+**Artifacts** section (sign in to GitHub), extract the entire ZIP, and run `Paster.Windows.exe`.
+The package includes .NET and Windows App SDK dependencies. Build artifacts are kept for
+30 days; they are separate from the manually published GitHub Releases.
+
+The workflow runs the core regression checks, compiles Windows services, publishes the app,
+and verifies that it completes startup and stays running for 20 seconds. Diagnostic logs are
+uploaded even on failure and kept for 14 days. GUI behavior such as pasting into another app
+and multi-monitor placement still needs manual testing.
+
+The SDK is restricted to stable .NET 8 feature bands by `global.json`, so newer SDKs preinstalled
+on the runner do not silently change the build toolchain. No repository secrets are required.
+
 ## First Run Notes
 
 - The app does not need network access and does not upload clipboard data.
