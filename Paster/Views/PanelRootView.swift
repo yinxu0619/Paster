@@ -135,6 +135,15 @@ enum PanelLayout {
     case bar
 }
 
+enum ClipboardSelection {
+    static func afterDeleting<ID: Equatable>(_ deleted: ID, from ids: [ID]) -> ID? {
+        guard let index = ids.firstIndex(of: deleted) else { return ids.first }
+        var remaining = ids
+        remaining.remove(at: index)
+        return remaining.isEmpty ? nil : remaining[min(index, remaining.count - 1)]
+    }
+}
+
 /// 呼出面板的根视图。
 ///
 /// 演进路线（增量，不推翻）：
@@ -153,6 +162,17 @@ struct PanelRootView: View {
     @State private var scrollTargetID: PersistentIdentifier?
     /// 搜索关键词。
     @State private var searchText: String = ""
+    @State private var filterKeyword = ""
+    @State private var pinnedIDs: [PersistentIdentifier] = []
+    @State private var unpinnedIDs: [PersistentIdentifier] = []
+    @State private var appNames: [String] = []
+
+    private struct ItemRevision: Equatable {
+        let id: PersistentIdentifier
+        let pinned: Bool
+        let pinnedAt: Date?
+    }
+
     /// 来源应用筛选（nil 表示全部）。
     @State private var selectedApp: String?
     /// 搜索框聚焦状态。
@@ -178,6 +198,19 @@ struct PanelRootView: View {
         .background(.ultraThinMaterial)
         .clipShape(RoundedRectangle(cornerRadius: layout == .bar ? 16 : 12, style: .continuous))
         .onAppear { onPanelAppear() }
+        .onChange(of: items.map { ItemRevision(id: $0.persistentModelID, pinned: $0.isPinned, pinnedAt: $0.pinnedAt) }) { _, _ in
+            rebuildVisibleItems()
+        }
+        .onChange(of: selectedApp) { _, _ in rebuildVisibleItems() }
+        .task(id: searchText) {
+            if !searchText.isEmpty {
+                do { try await Task.sleep(for: .milliseconds(120)) }
+                catch { return }
+            }
+            guard !Task.isCancelled else { return }
+            filterKeyword = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+            rebuildVisibleItems()
+        }
         // 不在 onDisappear 里停监听：面板内容会被复用，隐藏/再呼出时 onAppear 未必重新触发，
         // 停了就再也起不来（滚轮失效）。监听器已按 `event.window is FloatingPanel` 过滤，
         // 常驻不会影响其它窗口；视图真正销毁时由各自 deinit 统一清理。
@@ -411,35 +444,31 @@ struct PanelRootView: View {
 
     // MARK: - 数据筛选与分组
 
-    private var filteredItems: [ClipboardItem] {
-        items.filter { item in
-            let matchesApp = selectedApp == nil || item.sourceAppName == selectedApp
-            let keyword = searchText.trimmingCharacters(in: .whitespaces)
-            let matchesText = keyword.isEmpty
+    private func rebuildVisibleItems() {
+        let keyword = filterKeyword
+        let filtered = items.filter { item in
+            guard selectedApp == nil || item.sourceAppName == selectedApp else { return false }
+            return keyword.isEmpty
                 || item.previewText.localizedCaseInsensitiveContains(keyword)
                 || (item.sourceAppName?.localizedCaseInsensitiveContains(keyword) ?? false)
-            return matchesApp && matchesText
         }
-    }
-
-    private var pinnedItems: [ClipboardItem] {
-        filteredItems
-            .filter(\.isPinned)
+        pinnedIDs = filtered.filter(\.isPinned)
             .sorted { ($0.pinnedAt ?? .distantPast) > ($1.pinnedAt ?? .distantPast) }
+            .map(\.persistentModelID)
+        unpinnedIDs = filtered.filter { !$0.isPinned }.map(\.persistentModelID)
+        appNames = Array(Set(items.compactMap(\.sourceAppName))).sorted()
     }
 
-    private var unpinnedItems: [ClipboardItem] {
-        filteredItems.filter { !$0.isPinned }
+    // Cache identities rather than models: after a deletion @Query can update before
+    // onChange rebuilds the cache. Resolve only live rows so a card never reads a deleted model.
+    private func resolve(_ ids: [PersistentIdentifier]) -> [ClipboardItem] {
+        let live = Dictionary(uniqueKeysWithValues: items.map { ($0.persistentModelID, $0) })
+        return ids.compactMap { live[$0] }
     }
 
-    /// 键盘导航使用的扁平有序列表（固定在前）。
-    private var orderedVisible: [ClipboardItem] {
-        pinnedItems + unpinnedItems
-    }
-
-    private var appNames: [String] {
-        Array(Set(items.compactMap(\.sourceAppName))).sorted()
-    }
+    private var pinnedItems: [ClipboardItem] { resolve(pinnedIDs) }
+    private var unpinnedItems: [ClipboardItem] { resolve(unpinnedIDs) }
+    private var orderedVisible: [ClipboardItem] { resolve(pinnedIDs + unpinnedIDs) }
 
     private var selectedItem: ClipboardItem? {
         guard let selectedID else { return nil }
@@ -545,17 +574,10 @@ struct PanelRootView: View {
     }
 
     private func deleteAndAdvance(_ item: ClipboardItem) {
-        let ids = orderedVisible.map(\.persistentModelID)
-        let index = ids.firstIndex(of: item.persistentModelID)
+        let next = ClipboardSelection.afterDeleting(item.persistentModelID,
+            from: orderedVisible.map(\.persistentModelID))
         actions.delete(item)
-        if let index {
-            let remaining = ids.count - 1
-            if remaining > 0 {
-                selectedID = ids[min(index, remaining - 1)]
-            } else {
-                selectedID = nil
-            }
-        }
+        selectedID = next
     }
 
     // MARK: - 生命周期
@@ -575,6 +597,8 @@ struct PanelRootView: View {
         keyboard.onDelete = { if let item = selectedItem { deleteAndAdvance(item) } }
 
         searchText = ""
+        filterKeyword = ""
+        rebuildVisibleItems()
         // 先清空滚动目标，确保随后设定选中项时必定触发一次滚动到位。
         scrollTargetID = nil
         if layout == .bar { wheel.start() }

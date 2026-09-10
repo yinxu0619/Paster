@@ -116,3 +116,9 @@
 /* Card */
 "card.unknownSource" = "未知来源";
 "card.image" = "图片";
+
+"alert.storageTitle" = "无法打开剪贴板历史";
+
+"alert.storageMessage" = "原有历史文件已保留。本次使用临时存储，退出 Paster 后新记录将丢失。请退出并备份存储目录，再尝试修复。";
+
+"alert.showStorage" = "显示存储目录";

@@ -116,3 +116,9 @@
 /* Card */
 "card.unknownSource" = "Unknown Source";
 "card.image" = "Image";
+
+"alert.storageTitle" = "History could not be opened";
+
+"alert.storageMessage" = "Your existing history has been preserved. This session uses temporary storage: new copies will be lost when Paster quits. Quit and back up the storage folder before attempting to repair it.";
+
+"alert.showStorage" = "Show Storage Folder";

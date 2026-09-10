@@ -14,6 +14,8 @@ public sealed class ClipboardViewModel : INotifyPropertyChanged
     private readonly AppSettings _settings;
     private readonly PasteService _pasteService;
     private CancellationTokenSource? _pendingSearch;
+    private readonly SemaphoreSlim _mutations = new(1, 1);
+    private long _refreshRevision;
     private string _searchText = string.Empty;
     private ClipboardItem? _selectedItem;
 
@@ -26,6 +28,7 @@ public sealed class ClipboardViewModel : INotifyPropertyChanged
         {
             if (SetField(ref _searchText, value))
             {
+                _refreshRevision++;
                 ScheduleSearch();
             }
         }
@@ -90,13 +93,19 @@ public sealed class ClipboardViewModel : INotifyPropertyChanged
 
     public async Task RefreshAsync(CancellationToken cancellationToken = default)
     {
-        var items = await _database.GetItemsAsync(SearchText, _settings.HistoryLimit, cancellationToken);
-        if (cancellationToken.IsCancellationRequested)
+        var revision = ++_refreshRevision;
+        var keyword = SearchText;
+        await _mutations.WaitAsync(cancellationToken);
+        try
         {
-            return;
+            if (revision != _refreshRevision) { return; }
+            var items = await _database.GetItemsAsync(keyword, _settings.HistoryLimit, cancellationToken);
+            if (!cancellationToken.IsCancellationRequested && revision == _refreshRevision && keyword == SearchText)
+            {
+                Merge(items);
+            }
         }
-
-        Merge(items);
+        finally { _mutations.Release(); }
     }
 
     /// <summary>
@@ -195,46 +204,39 @@ public sealed class ClipboardViewModel : INotifyPropertyChanged
         }
 
         var item = SelectedItem;
-        var selectedIndex = Items.IndexOf(item);
-        await _database.DeleteAsync(item.Id);
-
-        if (selectedIndex >= 0)
+        await _mutations.WaitAsync();
+        try
         {
-            Items.RemoveAt(selectedIndex);
+            await _database.DeleteAsync(item.Id);
+            var selectedIndex = IndexOf(item.Id, 0);
+            var wasSelected = SelectedItem?.Id == item.Id;
+            if (selectedIndex >= 0) { Items.RemoveAt(selectedIndex); }
+            if (wasSelected)
+            {
+                SelectedItem = Items.Count == 0 ? null : Items[Math.Clamp(selectedIndex, 0, Items.Count - 1)];
+            }
+            OnPropertyChanged(nameof(ItemCountText));
         }
-
-        if (Items.Count == 0)
-        {
-            SelectedItem = null;
-        }
-        else
-        {
-            // Deleting keeps the cursor where it was rather than jumping back to the top.
-            SelectedItem = Items[Math.Clamp(selectedIndex, 0, Items.Count - 1)];
-        }
-
-        OnPropertyChanged(nameof(ItemCountText));
+        finally { _mutations.Release(); }
     }
 
     public async Task TogglePinSelectedAsync()
     {
-        if (SelectedItem is null)
+        if (SelectedItem is not { } item) { return; }
+        await _mutations.WaitAsync();
+        try
         {
-            return;
+            await _database.TogglePinAsync(item);
+            var from = IndexOf(item.Id, 0);
+            if (from < 0) { return; }
+            var live = Items[from];
+            live.IsPinned = item.IsPinned;
+            live.PinnedAt = item.PinnedAt;
+            Items.RemoveAt(from);
+            Items.Insert(InsertIndexFor(live), live);
+            if (SelectedItem?.Id == item.Id) { SelectedItem = live; }
         }
-
-        var item = SelectedItem;
-        await _database.TogglePinAsync(item);
-
-        var from = Items.IndexOf(item);
-        if (from < 0)
-        {
-            return;
-        }
-
-        Items.RemoveAt(from);
-        Items.Insert(InsertIndexFor(item), item);
-        SelectedItem = item;
+        finally { _mutations.Release(); }
     }
 
     /// <summary>
@@ -260,7 +262,9 @@ public sealed class ClipboardViewModel : INotifyPropertyChanged
     /// </summary>
     public async Task ClearAllAsync()
     {
-        await _database.ClearAsync();
+        await _mutations.WaitAsync();
+        try { await _database.ClearAsync(); }
+        finally { _mutations.Release(); }
         await RefreshAsync();
     }
 

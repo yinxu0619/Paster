@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="9.*" />
+    <Compile Include="../../src/Paster.Windows/Models/*.cs" Link="Models/%(Filename)%(Extension)" />
+    <Compile Include="../../src/Paster.Windows/Native/NativeMethods.cs" Link="NativeMethods.cs" />
+    <Compile Include="../../src/Paster.Windows/Services/Clipboard*.cs" Link="Services/%(Filename)%(Extension)" />
+    <Compile Include="../../src/Paster.Windows/Services/PasteService.cs" Link="PasteService.cs" />
+    <Compile Include="../../src/Paster.Windows/Services/ForegroundWindowTracker.cs" Link="ForegroundWindowTracker.cs" />
+    <Compile Include="../../src/Paster.Windows/Services/AppSettings.cs" Link="AppSettings.cs" />
+    <Compile Include="../../src/Paster.Windows/Services/AppLog.cs" Link="AppLog.cs" />
+    <Compile Include="../../src/Paster.Windows/Services/MessageWindow.cs" Link="MessageWindow.cs" />
+    <Compile Include="../../src/Paster.Windows/Utilities/ImageUtils.cs" Link="ImageUtils.cs" />
+    <Compile Include="../../src/Paster.Windows/ViewModels/ClipboardViewModel.cs" Link="ClipboardViewModel.cs" />
+  </ItemGroup>
+</Project>

@@ -39,6 +39,7 @@ xcrun swiftc \
     -plugin-path "$PLUGIN" \
     -parse-as-library \
     -swift-version 5 \
+    -O -whole-module-optimization \
     -o "$MACOS_DIR/$APP_NAME" \
     $SOURCES
 

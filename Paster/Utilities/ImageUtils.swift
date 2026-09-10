@@ -1,4 +1,6 @@
 import AppKit
+import ImageIO
+import UniformTypeIdentifiers
 
 /// 图片处理工具：PNG 编码、缩放、缩略图与存储压缩。
 ///
@@ -6,6 +8,31 @@ import AppKit
 /// 第 4 轮：新增「存储压缩」——超过最大边长的大图会被等比缩小后再持久化，
 /// 降低数据库体积与内存占用。
 enum ImageUtils {
+    /// ImageIO uses pixel dimensions and has no AppKit/window-server dependency.
+    /// Both full storage and preview images are downsampled before decoding.
+    static func processForStorage(_ data: Data) -> (image: Data, thumbnail: Data)? {
+        guard let source = CGImageSourceCreateWithData(data as CFData,
+            [kCGImageSourceShouldCache: false] as CFDictionary),
+              let image = downsample(source, maxDimension: 1600),
+              let thumbnail = downsample(source, maxDimension: 240) else { return nil }
+        return (image, thumbnail)
+    }
+
+    private static func downsample(_ source: CGImageSource, maxDimension: Int) -> Data? {
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: maxDimension,
+            kCGImageSourceShouldCacheImmediately: true
+        ]
+        guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return nil }
+        let output = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(output, UTType.png.identifier as CFString, 1, nil) else { return nil }
+        CGImageDestinationAddImage(destination, image, nil)
+        guard CGImageDestinationFinalize(destination) else { return nil }
+        return output as Data
+    }
+
     /// 将 `NSImage` 编码为 PNG 数据。
     static func pngData(from image: NSImage) -> Data? {
         guard let tiff = image.tiffRepresentation,

@@ -122,9 +122,9 @@ struct ClipboardCardView: View {
     }
 
     private var textPreview: some View {
-        Text(item.previewText)
+        Text(String(item.previewText.prefix(2_000)))
             .font(.system(size: 13))
-            .lineLimit(fillHeight ? nil : 4)
+            .lineLimit(fillHeight ? 20 : 4)
             .frame(maxWidth: .infinity, maxHeight: fillHeight ? .infinity : nil, alignment: .topLeading)
     }
 

@@ -18,6 +18,7 @@ final class SettingsViewModel: ObservableObject {
         do {
             try context.delete(model: ClipboardItem.self, where: #Predicate { $0.isPinned == false })
             try context.save()
+            NotificationCenter.default.post(name: ClipboardMonitor.historyClearedNotification, object: nil)
         } catch {
             NSLog("[Paster] 清空历史失败: \(error.localizedDescription)")
         }

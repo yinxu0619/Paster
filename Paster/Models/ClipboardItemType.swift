@@ -3,7 +3,7 @@ import Foundation
 /// 剪贴板内容类型。
 /// 第 1 轮仅支持 `text`；第 2 轮在此「新增」富文本、图片、文件、URL 四种 case，
 /// 不删除已有 case，以保证增量兼容与历史数据可读。
-enum ClipboardItemType: String, Codable, CaseIterable {
+enum ClipboardItemType: String, Codable, CaseIterable, Sendable {
     case text
     case richText
     case image

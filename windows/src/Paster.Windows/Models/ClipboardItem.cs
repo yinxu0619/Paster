@@ -1,3 +1,6 @@
+using System.Security.Cryptography;
+using System.Text;
+
 namespace Paster.Windows.Models;
 
 public sealed class ClipboardItem
@@ -6,6 +9,7 @@ public sealed class ClipboardItem
     public ClipboardItemType Type { get; set; } = ClipboardItemType.Text;
     public string? Text { get; set; }
     public string? Html { get; set; }
+    public string? ContentDigest { get; set; }
     public byte[]? RtfData { get; set; }
     public byte[]? ImageData { get; set; }
     public byte[]? ThumbnailData { get; set; }
@@ -44,24 +48,29 @@ public sealed class ClipboardItem
         !string.IsNullOrWhiteSpace(FilePathList) ? FilePathList! :
         PreviewText;
 
-    public string DeduplicationKey =>
-        BuildDeduplicationKey(Type, Text, Url, FilePathList, ImageData?.Length ?? 0);
+    public string DeduplicationKey => ContentDigest ?? ComputeDeduplicationKey();
 
-    /// <summary>
-    /// Builds the key from raw column values so the database can compare against the newest row
-    /// using length(ImageData) instead of loading the blob.
-    /// </summary>
-    public static string BuildDeduplicationKey(
-        ClipboardItemType type,
-        string? text,
-        string? url,
-        string? filePathList,
-        long imageLength) => type switch
+    public string ComputeDeduplicationKey() => Type switch
+    {
+        ClipboardItemType.Image => "image:" + Digest(ImageData ?? []),
+        ClipboardItemType.RichText => "richText:" + Digest(
+            Encoding.UTF8.GetBytes(Text ?? string.Empty), RtfData ?? [], Encoding.UTF8.GetBytes(Html ?? string.Empty)),
+        ClipboardItemType.File => $"file:{FilePathList ?? Text ?? string.Empty}",
+        _ => $"{Type}:{Text ?? Url ?? string.Empty}"
+    };
+
+    private static string Digest(params byte[][] parts)
+    {
+        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        Span<byte> length = stackalloc byte[8];
+        foreach (var part in parts)
         {
-            ClipboardItemType.Image => $"image:{imageLength}",
-            ClipboardItemType.File => $"file:{filePathList ?? text ?? string.Empty}",
-            _ => $"{type}:{text ?? url ?? string.Empty}"
-        };
+            System.Buffers.Binary.BinaryPrimitives.WriteInt64BigEndian(length, part.LongLength);
+            hash.AppendData(length);
+            hash.AppendData(part);
+        }
+        return Convert.ToHexString(hash.GetHashAndReset());
+    }
 
     private string FileDisplayNames
     {

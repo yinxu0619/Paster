@@ -1,5 +1,6 @@
 import Foundation
 import SwiftData
+import CryptoKit
 
 /// 单条剪贴板历史记录的持久化模型（SwiftData）。
 ///
@@ -26,6 +27,9 @@ final class ClipboardItem {
 
     /// 图片缩略图数据（PNG，用于列表快速预览，避免加载原图）。
     var thumbnailData: Data? = nil
+
+    /// Cached fingerprint; older stores compute it lazily without a destructive migration.
+    var contentDigest: String? = nil
 
     /// 文件 URL 字符串（file://...，可为多文件换行拼接的首个）。
     var fileURLString: String? = nil
@@ -125,13 +129,29 @@ extension ClipboardItem {
 
     /// 用于与最近一条做去重比较的键。
     var deduplicationKey: String {
+        contentDigest ?? computedDeduplicationKey
+    }
+
+    var computedDeduplicationKey: String {
         switch type {
         case .image:
-            return "image:\(imageData?.count ?? 0)"
+            return "image:" + Self.digest([imageData ?? Data()])
+        case .richText:
+            return "richText:" + Self.digest([Data((text ?? "").utf8), rtfData ?? Data()])
         case .file:
             return "file:\(fileURLString ?? text ?? "")"
         default:
             return "\(typeRaw):\(text ?? urlString ?? "")"
         }
+    }
+
+    static func digest(_ parts: [Data]) -> String {
+        var hash = SHA256()
+        for part in parts {
+            var length = UInt64(part.count).bigEndian
+            withUnsafeBytes(of: &length) { hash.update(data: Data($0)) }
+            hash.update(data: part)
+        }
+        return hash.finalize().map { String(format: "%02x", $0) }.joined()
     }
 }

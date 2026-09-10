@@ -41,12 +41,13 @@ public sealed class ClipboardDatabase
     });
 
     private readonly string _connectionString;
+    private readonly SemaphoreSlim _operations = new(1, 1);
 
-    public ClipboardDatabase()
+    public ClipboardDatabase(string? databasePath = null)
     {
         var root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Paster.Windows");
-        Directory.CreateDirectory(root);
-        DatabasePath = Path.Combine(root, "clipboard.db");
+        DatabasePath = databasePath ?? Path.Combine(root, "clipboard.db");
+        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(DatabasePath))!);
         _connectionString = new SqliteConnectionStringBuilder
         {
             DataSource = DatabasePath
@@ -55,10 +56,10 @@ public sealed class ClipboardDatabase
 
     public string DatabasePath { get; }
 
-    public async Task InitializeAsync()
+    private void Initialize()
     {
-        await using var connection = OpenConnection();
-        var command = connection.CreateCommand();
+        using var connection = OpenConnection();
+        using var command = connection.CreateCommand();
         // WAL keeps the background image migration from blocking history reads.
         command.CommandText = """
             PRAGMA journal_mode=WAL;
@@ -81,20 +82,29 @@ public sealed class ClipboardDatabase
             CREATE INDEX IF NOT EXISTS IX_ClipboardItems_CreatedAt ON ClipboardItems(CreatedAt DESC);
             CREATE INDEX IF NOT EXISTS IX_ClipboardItems_IsPinned ON ClipboardItems(IsPinned, PinnedAt DESC);
             """;
-        await command.ExecuteNonQueryAsync();
+        command.ExecuteNonQuery();
+        using var columns = connection.CreateCommand();
+        columns.CommandText = "PRAGMA table_info(ClipboardItems)";
+        using var reader = columns.ExecuteReader();
+        var hasDigest = false;
+        while (reader.Read()) { hasDigest |= reader.GetString(1) == "ContentDigest"; }
+        reader.Close();
+        if (!hasDigest)
+        {
+            using var migration = connection.CreateCommand();
+            migration.CommandText = "ALTER TABLE ClipboardItems ADD COLUMN ContentDigest TEXT NULL";
+            migration.ExecuteNonQuery();
+        }
     }
 
     /// <summary>
     /// Loads the history list. Pinned items are always included; unpinned items are capped at
     /// <paramref name="limit"/>, matching enforceHistoryLimit() in the macOS ClipboardMonitor.
     /// </summary>
-    public async Task<IReadOnlyList<ClipboardItem>> GetItemsAsync(
-        string? keyword = null,
-        int limit = 0,
-        CancellationToken cancellationToken = default)
+    private IReadOnlyList<ClipboardItem> GetItems(string? keyword = null, int limit = 0, CancellationToken cancellationToken = default)
     {
-        await using var connection = OpenConnection();
-        var command = connection.CreateCommand();
+        using var connection = OpenConnection();
+        using var command = connection.CreateCommand();
         var hasKeyword = !string.IsNullOrWhiteSpace(keyword);
         var filter = hasKeyword ? $"AND {KeywordFilter}" : string.Empty;
 
@@ -126,9 +136,10 @@ public sealed class ClipboardDatabase
         }
 
         var result = new List<ClipboardItem>();
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        while (await reader.ReadAsync(cancellationToken))
+        using var reader = command.ExecuteReader();
+        while (reader.Read())
         {
+            cancellationToken.ThrowIfCancellationRequested();
             result.Add(ReadListItem(reader));
         }
 
@@ -138,102 +149,105 @@ public sealed class ClipboardDatabase
     /// <summary>
     /// Loads every column for a single item. Used to hydrate blobs on the paste path.
     /// </summary>
-    public async Task<ClipboardItem?> GetFullItemAsync(Guid id)
+    private ClipboardItem? GetFullItem(Guid id)
     {
-        await using var connection = OpenConnection();
-        var command = connection.CreateCommand();
+        using var connection = OpenConnection();
+        using var command = connection.CreateCommand();
         command.CommandText = "SELECT * FROM ClipboardItems WHERE Id = $id LIMIT 1";
         command.Parameters.AddWithValue("$id", id.ToString());
-        await using var reader = await command.ExecuteReaderAsync();
-        return await reader.ReadAsync() ? ReadItem(reader) : null;
+        using var reader = command.ExecuteReader();
+        return reader.Read() ? ReadItem(reader) : null;
     }
 
-    /// <summary>
-    /// Reads just enough of the newest row to compare deduplication keys. Uses length(ImageData)
-    /// so a repeated screenshot does not pull a multi-megabyte blob out of the database.
-    /// </summary>
-    public async Task<string?> GetLatestDeduplicationKeyAsync()
+    /// <summary>Old rows are fingerprinted only if they become the newest candidate.</summary>
+    private string? GetLatestDeduplicationKey()
     {
-        await using var connection = OpenConnection();
-        var command = connection.CreateCommand();
-        command.CommandText = """
-            SELECT Type, Text, Url, FilePathList, COALESCE(length(ImageData), 0) AS ImageLength
-            FROM ClipboardItems
-            ORDER BY CreatedAt DESC
-            LIMIT 1
-            """;
-        await using var reader = await command.ExecuteReaderAsync();
-        if (!await reader.ReadAsync())
-        {
-            return null;
-        }
-
-        return ClipboardItem.BuildDeduplicationKey(
-            (ClipboardItemType)reader.GetInt32(reader.GetOrdinal("Type")),
-            GetNullableString(reader, "Text"),
-            GetNullableString(reader, "Url"),
-            GetNullableString(reader, "FilePathList"),
-            reader.GetInt64(reader.GetOrdinal("ImageLength")));
+        using var connection = OpenConnection();
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT Id, ContentDigest FROM ClipboardItems ORDER BY CreatedAt DESC LIMIT 1";
+        using var reader = command.ExecuteReader();
+        if (!reader.Read()) { return null; }
+        var id = Guid.Parse(reader.GetString(0));
+        if (!reader.IsDBNull(1)) { return reader.GetString(1); }
+        reader.Close();
+        var item = GetFullItem(id);
+        if (item is null) { return null; }
+        var digest = item.ComputeDeduplicationKey();
+        using var update = connection.CreateCommand();
+        update.CommandText = "UPDATE ClipboardItems SET ContentDigest = $digest WHERE Id = $id";
+        update.Parameters.AddWithValue("$digest", digest);
+        update.Parameters.AddWithValue("$id", id.ToString());
+        update.ExecuteNonQuery();
+        return digest;
     }
 
-    public async Task AddAsync(ClipboardItem item)
+    private void Add(ClipboardItem item)
     {
-        await using var connection = OpenConnection();
-        var command = connection.CreateCommand();
+        using var connection = OpenConnection();
+        using var command = connection.CreateCommand();
         command.CommandText = """
             INSERT INTO ClipboardItems
-            (Id, Type, Text, Html, RtfData, ImageData, ThumbnailData, FilePathList, Url, SourceAppName, SourceProcessPath, IsPinned, PinnedAt, CreatedAt)
+            (Id, Type, Text, Html, RtfData, ImageData, ThumbnailData, FilePathList, Url, SourceAppName, SourceProcessPath, IsPinned, PinnedAt, CreatedAt, ContentDigest)
             VALUES
-            ($id, $type, $text, $html, $rtf, $image, $thumb, $files, $url, $sourceName, $sourcePath, $isPinned, $pinnedAt, $createdAt)
+            ($id, $type, $text, $html, $rtf, $image, $thumb, $files, $url, $sourceName, $sourcePath, $isPinned, $pinnedAt, $createdAt, $digest)
             """;
         BindItem(command, item);
-        await command.ExecuteNonQueryAsync();
+        command.Parameters.AddWithValue("$digest", item.ComputeDeduplicationKey());
+        command.ExecuteNonQuery();
     }
 
-    public async Task DeleteAsync(Guid id)
+    private void Delete(Guid id)
     {
-        await using var connection = OpenConnection();
-        var command = connection.CreateCommand();
+        using var connection = OpenConnection();
+        using var command = connection.CreateCommand();
         command.CommandText = "DELETE FROM ClipboardItems WHERE Id = $id";
         command.Parameters.AddWithValue("$id", id.ToString());
-        await command.ExecuteNonQueryAsync();
+        command.ExecuteNonQuery();
     }
 
     public async Task TogglePinAsync(ClipboardItem item)
     {
-        item.IsPinned = !item.IsPinned;
-        item.PinnedAt = item.IsPinned ? DateTimeOffset.Now : null;
+        var pinned = !item.IsPinned;
+        DateTimeOffset? pinnedAt = pinned ? DateTimeOffset.Now : null;
+        var id = item.Id;
+        await RunAsync(() => SetPin(id, pinned, pinnedAt));
+        // Mutable UI state changes only after the write succeeds, back on the caller's context.
+        item.IsPinned = pinned;
+        item.PinnedAt = pinnedAt;
+    }
 
-        await using var connection = OpenConnection();
-        var command = connection.CreateCommand();
+    private void SetPin(Guid id, bool pinned, DateTimeOffset? pinnedAt)
+    {
+        using var connection = OpenConnection();
+        using var command = connection.CreateCommand();
         command.CommandText = "UPDATE ClipboardItems SET IsPinned = $isPinned, PinnedAt = $pinnedAt WHERE Id = $id";
-        command.Parameters.AddWithValue("$id", item.Id.ToString());
-        command.Parameters.AddWithValue("$isPinned", item.IsPinned ? 1 : 0);
-        command.Parameters.AddWithValue("$pinnedAt", (object?)item.PinnedAt?.ToString("O") ?? DBNull.Value);
-        await command.ExecuteNonQueryAsync();
+        command.Parameters.AddWithValue("$isPinned", pinned ? 1 : 0);
+        command.Parameters.AddWithValue("$pinnedAt", (object?)pinnedAt?.ToString("O") ?? DBNull.Value);
+        command.Parameters.AddWithValue("$id", id.ToString());
+        command.ExecuteNonQuery();
     }
 
     /// <summary>
     /// Clears the history but keeps pinned rows: pinning is the user's "keep this" marker, so a
     /// clear that discarded pinned items would throw away the entries they deliberately protected.
     /// </summary>
-    public async Task ClearAsync()
+    private void Clear()
     {
-        await using var connection = OpenConnection();
-        var command = connection.CreateCommand();
+        using var connection = OpenConnection();
+        using var command = connection.CreateCommand();
         command.CommandText = "DELETE FROM ClipboardItems WHERE IsPinned = 0";
-        await command.ExecuteNonQueryAsync();
+        command.ExecuteNonQuery();
     }
 
-    public async Task EnforceHistoryLimitAsync(int limit)
+    private void EnforceHistoryLimit(int limit)
     {
         if (limit <= 0)
         {
             return;
         }
 
-        await using var connection = OpenConnection();
-        var command = connection.CreateCommand();
+        using var connection = OpenConnection();
+        using var command = connection.CreateCommand();
         command.CommandText = """
             DELETE FROM ClipboardItems
             WHERE IsPinned = 0 AND Id NOT IN (
@@ -241,17 +255,17 @@ public sealed class ClipboardDatabase
             )
             """;
         command.Parameters.AddWithValue("$limit", limit);
-        await command.ExecuteNonQueryAsync();
+        command.ExecuteNonQuery();
     }
 
     /// <summary>
     /// Image rows written before thumbnails were downscaled, where ThumbnailData is a copy of the
     /// full-size image (or otherwise implausibly large for a preview).
     /// </summary>
-    public async Task<IReadOnlyList<Guid>> GetOversizedImageRowIdsAsync(int thumbnailByteThreshold)
+    private IReadOnlyList<Guid> GetOversizedImageRowIds(int thumbnailByteThreshold)
     {
-        await using var connection = OpenConnection();
-        var command = connection.CreateCommand();
+        using var connection = OpenConnection();
+        using var command = connection.CreateCommand();
         command.CommandText = """
             SELECT Id FROM ClipboardItems
             WHERE Type = $imageType
@@ -265,8 +279,8 @@ public sealed class ClipboardDatabase
         command.Parameters.AddWithValue("$threshold", thumbnailByteThreshold);
 
         var ids = new List<Guid>();
-        await using var reader = await command.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
+        using var reader = command.ExecuteReader();
+        while (reader.Read())
         {
             if (Guid.TryParse(reader.GetString(0), out var id))
             {
@@ -277,36 +291,87 @@ public sealed class ClipboardDatabase
         return ids;
     }
 
-    public async Task<byte[]?> GetImageDataAsync(Guid id)
+    private byte[]? GetImageData(Guid id)
     {
-        await using var connection = OpenConnection();
-        var command = connection.CreateCommand();
+        using var connection = OpenConnection();
+        using var command = connection.CreateCommand();
         command.CommandText = "SELECT ImageData FROM ClipboardItems WHERE Id = $id LIMIT 1";
         command.Parameters.AddWithValue("$id", id.ToString());
-        await using var reader = await command.ExecuteReaderAsync();
-        return await reader.ReadAsync() ? GetNullableBytes(reader, "ImageData") : null;
+        using var reader = command.ExecuteReader();
+        return reader.Read() ? GetNullableBytes(reader, "ImageData") : null;
     }
 
-    public async Task UpdateImageDataAsync(Guid id, byte[] imageData, byte[] thumbnailData)
+    private void UpdateImageData(Guid id, byte[] imageData, byte[] thumbnailData)
     {
-        await using var connection = OpenConnection();
-        var command = connection.CreateCommand();
-        command.CommandText = "UPDATE ClipboardItems SET ImageData = $image, ThumbnailData = $thumb WHERE Id = $id";
+        using var connection = OpenConnection();
+        using var command = connection.CreateCommand();
+        command.CommandText = "UPDATE ClipboardItems SET ImageData = $image, ThumbnailData = $thumb, ContentDigest = NULL WHERE Id = $id";
         command.Parameters.AddWithValue("$id", id.ToString());
         command.Parameters.Add("$image", SqliteType.Blob).Value = imageData;
         command.Parameters.Add("$thumb", SqliteType.Blob).Value = thumbnailData;
-        await command.ExecuteNonQueryAsync();
+        command.ExecuteNonQuery();
     }
 
     /// <summary>
     /// Reclaims the free pages left behind after shrinking image blobs.
     /// </summary>
-    public async Task VacuumAsync()
+    private void Vacuum()
     {
-        await using var connection = OpenConnection();
-        var command = connection.CreateCommand();
+        using var connection = OpenConnection();
+        using var command = connection.CreateCommand();
         command.CommandText = "VACUUM";
-        await command.ExecuteNonQueryAsync();
+        command.ExecuteNonQuery();
+    }
+
+    // Microsoft.Data.Sqlite's Async methods perform synchronous I/O. Serialize the work on
+    // a worker thread; connection creation, lock waits and row materialization stay off the UI.
+    public Task InitializeAsync() =>
+        RunAsync(() => Initialize());
+
+    public Task<IReadOnlyList<ClipboardItem>> GetItemsAsync(string? keyword = null, int limit = 0, CancellationToken cancellationToken = default) =>
+        RunAsync(() => GetItems(keyword, limit, cancellationToken), cancellationToken);
+
+    public Task<ClipboardItem?> GetFullItemAsync(Guid id) =>
+        RunAsync(() => GetFullItem(id));
+
+    public Task<string?> GetLatestDeduplicationKeyAsync() =>
+        RunAsync(() => GetLatestDeduplicationKey());
+
+    public Task AddAsync(ClipboardItem item) =>
+        RunAsync(() => Add(item));
+
+    public Task DeleteAsync(Guid id) =>
+        RunAsync(() => Delete(id));
+
+    public Task ClearAsync() =>
+        RunAsync(() => Clear());
+
+    public Task EnforceHistoryLimitAsync(int limit) =>
+        RunAsync(() => EnforceHistoryLimit(limit));
+
+    public Task<IReadOnlyList<Guid>> GetOversizedImageRowIdsAsync(int thumbnailByteThreshold) =>
+        RunAsync(() => GetOversizedImageRowIds(thumbnailByteThreshold));
+
+    public Task<byte[]?> GetImageDataAsync(Guid id) =>
+        RunAsync(() => GetImageData(id));
+
+    public Task UpdateImageDataAsync(Guid id, byte[] imageData, byte[] thumbnailData) =>
+        RunAsync(() => UpdateImageData(id, imageData, thumbnailData));
+
+    public Task VacuumAsync() =>
+        RunAsync(() => Vacuum());
+
+    private Task RunAsync(Action operation, CancellationToken cancellationToken = default) =>
+        RunAsync(() => { operation(); return true; }, cancellationToken);
+
+    private async Task<T> RunAsync<T>(Func<T> operation, CancellationToken cancellationToken = default)
+    {
+        await _operations.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            return await Task.Run(operation, cancellationToken).ConfigureAwait(false);
+        }
+        finally { _operations.Release(); }
     }
 
     private SqliteConnection OpenConnection()

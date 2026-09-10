@@ -50,6 +50,7 @@ public partial class App : Application
             _window = new MainWindow(viewModel, settings);
             _window.Closed += (_, _) =>
             {
+                pasteService.Dispose();
                 _trayIconService?.Dispose();
                 _clipboardMonitor?.Dispose();
                 _hotKeyService?.Dispose();
@@ -80,7 +81,7 @@ public partial class App : Application
             _hotKeyService = new HotKeyService(settings);
             _hotKeyService.HotKeyPressed += (_, targetWindow) =>
             {
-                pasteService.LastTargetWindow = targetWindow;
+                if (!_window.IsPanelVisible) { pasteService.CaptureTargetWindow(targetWindow); }
                 _window.DispatcherQueue.TryEnqueue(() => _window.TogglePanel(targetWindow));
             };
             _hotKeyService.Start();
@@ -108,7 +109,14 @@ public partial class App : Application
                 _window.DispatcherQueue,
                 (english, chinese) => Localize(settings, english, chinese),
                 shown,
-                () => _window.ShowMainWindow(Localize(settings, "Paster is running from the system tray.", "Paster 正在系统托盘中运行。")),
+                () =>
+                {
+                    if (!_window.IsPanelVisible)
+                    {
+                        pasteService.CaptureTargetWindow(Native.NativeMethods.GetForegroundWindow());
+                    }
+                    _window.ShowMainWindow(Localize(settings, "Paster is running from the system tray.", "Paster 正在系统托盘中运行。"));
+                },
                 // Routed through the panel so the tray shares its confirmation dialog instead of
                 // deleting on a single click.
                 () => _ = _window.ConfirmAndClearFromTrayAsync(),
@@ -152,8 +160,11 @@ public partial class App : Application
         _refreshRunning = true;
         try
         {
-            _pendingRefresh = false;
-            await viewModel.RefreshAsync();
+            do
+            {
+                _pendingRefresh = false;
+                await viewModel.RefreshAsync();
+            } while (_pendingRefresh && _window?.IsPanelVisible == true);
         }
         finally
         {

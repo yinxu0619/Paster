@@ -7,7 +7,7 @@ using Windows.Storage.Streams;
 
 namespace Paster.Windows.Services;
 
-public sealed class PasteService
+public sealed class PasteService : IDisposable
 {
     private const ushort VkControl = 0x11;
     private const ushort VkV = 0x56;
@@ -15,7 +15,18 @@ public sealed class PasteService
     private const uint KeyEventKeyUp = 0x0002;
     private readonly ClipboardDatabase _database;
 
-    public IntPtr LastTargetWindow { get; set; }
+    private readonly ForegroundWindowTracker _foreground = new();
+    private uint _targetProcess;
+    private bool _pasting;
+    public IntPtr LastTargetWindow { get; private set; }
+
+    public void CaptureTargetWindow(IntPtr candidate)
+    {
+        LastTargetWindow = _foreground.Capture(candidate);
+        NativeMethods.GetWindowThreadProcessId(LastTargetWindow, out _targetProcess);
+    }
+
+    public void Dispose() => _foreground.Dispose();
 
     public PasteService(ClipboardDatabase database)
     {
@@ -43,17 +54,31 @@ public sealed class PasteService
 
     public async Task PasteAsync(ClipboardItem item, bool plainText = false)
     {
-        await CopyAsync(item, plainText);
-
-        if (LastTargetWindow != IntPtr.Zero)
+        if (_pasting) { return; }
+        _pasting = true;
+        var target = LastTargetWindow;
+        var targetProcess = _targetProcess;
+        try
         {
-            NativeMethods.ShowWindow(LastTargetWindow, NativeMethods.SwShow);
-            NativeMethods.SetForegroundWindow(LastTargetWindow);
+            await CopyAsync(item, plainText);
+            NativeMethods.GetWindowThreadProcessId(target, out var process);
+            if (!NativeMethods.IsWindow(target) || process != targetProcess) { return; }
+            NativeMethods.ShowWindow(target, NativeMethods.SwShow);
+            NativeMethods.SetForegroundWindow(target);
+            await Task.Delay(120);
+            for (var attempt = 0; attempt < 25 && ModifiersHeld(); attempt++) { await Task.Delay(20); }
+            if (NativeMethods.GetForegroundWindow() != target || ModifiersHeld())
+            {
+                AppLog.Info("Paste cancelled because the target is not focused or shortcut keys are still held. Content remains copied.");
+                return;
+            }
+            SendCtrlV();
         }
-
-        await Task.Delay(120);
-        SendCtrlV();
+        finally { _pasting = false; }
     }
+
+    private static bool ModifiersHeld() => new[] { 0x10, 0x11, 0x12, 0x5B, 0x5C }
+        .Any(key => (NativeMethods.GetAsyncKeyState(key) & 0x8000) != 0);
 
     private async Task FillDataPackageAsync(DataPackage package, ClipboardItem item)
     {
@@ -74,7 +99,15 @@ public sealed class PasteService
                 {
                     try
                     {
-                        files.Add(await StorageFile.GetFileFromPathAsync(path.Trim()));
+                        var localPath = path.Trim();
+                        if (Directory.Exists(localPath))
+                        {
+                            files.Add(await StorageFolder.GetFolderFromPathAsync(localPath));
+                        }
+                        else
+                        {
+                            files.Add(await StorageFile.GetFileFromPathAsync(localPath));
+                        }
                     }
                     catch
                     {

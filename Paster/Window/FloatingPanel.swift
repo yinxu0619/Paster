@@ -5,6 +5,10 @@ import AppKit
 /// 使用 `NSPanel` + `.nonactivatingPanel`，可在不强制切换前台应用的情况下接收键盘焦点，
 /// 失去焦点时自动隐藏（由 `AppDelegate` 作为 delegate 处理）。
 final class FloatingPanel: NSPanel {
+    /// Above the Dock, while remaining below menus and system alerts.
+    static var presentationLevel: NSWindow.Level {
+        NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.dockWindow)) + 1)
+    }
     /// 按下 Esc（cancelOperation）时回调，由 `AppDelegate` 用于收起面板。
     var onCancel: (() -> Void)?
 
@@ -15,7 +19,7 @@ final class FloatingPanel: NSPanel {
                    defer: false)
 
         isFloatingPanel = true
-        level = .floating
+        level = Self.presentationLevel
         titleVisibility = .hidden
         titlebarAppearsTransparent = true
         standardWindowButton(.closeButton)?.isHidden = true
@@ -36,6 +40,11 @@ final class FloatingPanel: NSPanel {
     // 允许面板成为 key window，从而接收键盘事件。
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
+
+    override func makeKeyAndOrderFront(_ sender: Any?) {
+        level = Self.presentationLevel
+        super.makeKeyAndOrderFront(sender)
+    }
 
     // 不约束到屏幕内，便于呼出动画从屏幕边缘外升起，并精确停靠到边缘。
     override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect {

@@ -10,6 +10,8 @@ public sealed class AppSettings
         "Paster.Windows",
         "settings.json");
 
+    private string _settingsPath = SettingsPath;
+
     public int HistoryLimit { get; set; } = 200;
     public PanelPosition PanelPosition { get; set; } = PanelPosition.Bottom;
     public double BarHeight { get; set; } = 240;
@@ -36,22 +38,19 @@ public sealed class AppSettings
     public const double MaxPanelOpacity = 1.0;
     public const double DefaultPanelOpacity = 0.45;
 
-    public static AppSettings Load()
+    public static AppSettings Load(string? settingsPath = null)
     {
+        var path = settingsPath ?? SettingsPath;
         try
         {
-            if (File.Exists(SettingsPath))
+            if (File.Exists(path))
             {
-                var settings = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(SettingsPath)) ?? new AppSettings();
+                var settings = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(path)) ?? new AppSettings();
+                settings._settingsPath = path;
                 // Earlier MVP builds used Alt+V. There was no hotkey UI yet, so migrate that default to Alt+C.
                 if (settings.HotKeyModifiers == Native.NativeMethods.ModAlt && settings.HotKeyVirtualKey == 0x56)
                 {
                     settings.HotKeyVirtualKey = 0x43;
-                    settings.Save();
-                }
-                if (settings.PanelPosition == PanelPosition.Cursor)
-                {
-                    settings.PanelPosition = PanelPosition.Bottom;
                     settings.Save();
                 }
                 settings.PanelOpacity = Math.Clamp(settings.PanelOpacity, MinPanelOpacity, MaxPanelOpacity);
@@ -63,13 +62,13 @@ public sealed class AppSettings
             // Broken settings should not prevent clipboard capture from starting.
         }
 
-        return new AppSettings();
+        return new AppSettings { _settingsPath = path };
     }
 
     public void Save()
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath)!);
-        File.WriteAllText(SettingsPath, JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true }));
+        Directory.CreateDirectory(Path.GetDirectoryName(_settingsPath)!);
+        File.WriteAllText(_settingsPath, JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true }));
     }
 
     public bool IsExcluded(string? processNameOrPath)

@@ -55,14 +55,14 @@ public sealed class ClipboardMonitor : MessageWindow
                 return IntPtr.Zero;
             }
 
-            _ = RecordCurrentClipboardAsync();
+            _ = RecordCurrentClipboardAsync(CaptureCurrentClipboardAsync());
             return IntPtr.Zero;
         }
 
         return NativeMethods.DefWindowProc(hwnd, message, wParam, lParam);
     }
 
-    private async Task RecordCurrentClipboardAsync()
+    private async Task RecordCurrentClipboardAsync(Task<ClipboardItem?> capture)
     {
         try
         {
@@ -75,7 +75,7 @@ public sealed class ClipboardMonitor : MessageWindow
 
         try
         {
-            await RecordCurrentClipboardCoreAsync();
+            await RecordCurrentClipboardCoreAsync(capture);
         }
         catch (Exception ex)
         {
@@ -90,31 +90,33 @@ public sealed class ClipboardMonitor : MessageWindow
         }
     }
 
-    private async Task RecordCurrentClipboardCoreAsync()
+    private async Task<ClipboardItem?> CaptureCurrentClipboardAsync()
     {
-        var sourceWindow = NativeMethods.GetForegroundWindow();
+        // Read the clipboard before waiting for earlier database writes. The foreground window
+        // may already be Paster or the taskbar; the clipboard owner is a better source identity.
+        var owner = NativeMethods.GetClipboardOwner();
+        var sourceWindow = owner != IntPtr.Zero ? owner : NativeMethods.GetForegroundWindow();
         var sourcePath = NativeMethods.GetProcessPathFromWindow(sourceWindow);
-        if (_settings.IsExcluded(sourcePath))
-        {
-            return;
-        }
-
-        ClipboardItem? item;
+        if (_settings.IsExcluded(sourcePath)) { return null; }
+        var capturedAt = DateTimeOffset.Now;
         try
         {
-            item = await BuildItemAsync(sourcePath);
+            var item = await BuildItemAsync(sourcePath);
+            if (item is not null) { item.CreatedAt = capturedAt; }
+            return item;
         }
         catch (Exception ex)
         {
             AppLog.Error("Failed to read clipboard content.", ex);
-            return;
+            return null;
         }
+    }
 
-        if (item is null)
-        {
-            return;
-        }
-
+    private async Task RecordCurrentClipboardCoreAsync(Task<ClipboardItem?> capture)
+    {
+        var item = await capture;
+        if (_disposed || item is null || _settings.IsExcluded(item.SourceProcessPath)) { return; }
+        item.ContentDigest = await Task.Run(item.ComputeDeduplicationKey);
         var latestKey = await _database.GetLatestDeduplicationKeyAsync();
         if (latestKey == item.DeduplicationKey)
         {

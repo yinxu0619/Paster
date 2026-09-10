@@ -44,11 +44,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         registerHotKeyFromSettings()
 
+        if PersistenceManager.shared.storageError != nil {
+            DispatchQueue.main.async { self.showStorageError() }
+        }
+
         // 监听热键变更，实时重新注册。
         NotificationCenter.default.addObserver(self,
                                                selector: #selector(hotKeyDidChange),
                                                name: AppSettings.hotKeyChangedNotification,
                                                object: nil)
+    }
+
+    private func showStorageError() {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = L10n.tr("alert.storageTitle")
+        alert.informativeText = L10n.tr("alert.storageMessage")
+        alert.addButton(withTitle: L10n.tr("alert.showStorage"))
+        alert.addButton(withTitle: L10n.tr("alert.ok"))
+        NSApp.activate(ignoringOtherApps: true)
+        if alert.runModal() == .alertFirstButtonReturn {
+            NSWorkspace.shared.activateFileViewerSelecting([PersistenceManager.shared.storeURL])
+        }
     }
 
     private func registerHotKeyFromSettings() {
