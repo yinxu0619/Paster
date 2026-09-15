@@ -26,7 +26,49 @@ struct MacOSRegression {
         return bitmap.representation(using: .png, properties: [:])!
     }
 
+    static func checkPanelContentReuse() {
+        _ = NSApplication.shared
+        NSApp.setActivationPolicy(.accessory)
+        let panel = FloatingPanel(contentRect: NSRect(x: 0, y: 0, width: 360, height: 480))
+        defer { panel.close() }
+        var creations = 0
+        func configure(_ layout: PanelLayout, _ size: NSSize) {
+            panel.configureContent(layout: layout, size: size) {
+                creations += 1
+                let controller = NSViewController()
+                controller.view = NSView(frame: CGRect(origin: .zero, size: size))
+                return controller
+            }
+        }
+
+        configure(.bar, NSSize(width: 1440, height: 300))
+        let barContent = panel.contentViewController
+        // Alternate display widths, then change the configured bar height.
+        for size in [NSSize(width: 2560, height: 300), NSSize(width: 1440, height: 300),
+                     NSSize(width: 1440, height: 400)] {
+            configure(.bar, size)
+            check(panel.contentViewController === barContent, "Cross-display resizing must retain the warmed controller")
+            check(panel.contentView?.frame.size == size, "Reused content must fill the new panel size")
+        }
+        check(creations == 1, "Geometry changes must not rebuild panel content")
+
+        configure(.vertical, NSSize(width: 360, height: 480))
+        check(creations == 2 && panel.contentViewController !== barContent, "Switching layout must replace content")
+        let verticalContent = panel.contentViewController
+        configure(.vertical, NSSize(width: 360, height: 1000))
+        check(panel.contentViewController === verticalContent, "Sidebar resizing must retain vertical content")
+        panel.setContentSize(NSSize(width: 420, height: 900))
+        configure(.vertical, NSSize(width: 360, height: 1000))
+        check(panel.contentView?.frame.size == NSSize(width: 420, height: 900), "Unchanged configuration preserves manual resizing")
+        configure(.bar, NSSize(width: 1440, height: 300))
+        check(creations == 3, "Returning to bar layout must configure bar content")
+        panel.contentViewController = nil
+        configure(.bar, NSSize(width: 1440, height: 300))
+        check(creations == 4, "Missing content must be recreated even when layout is unchanged")
+    }
+
     static func main() throws {
+        checkPanelContentReuse()
         var seen: [Int: Data] = [:]
         var collision: (Data, Data)?
         for value in 0...255 {

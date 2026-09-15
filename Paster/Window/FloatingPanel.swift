@@ -12,6 +12,25 @@ final class FloatingPanel: NSPanel {
     /// 按下 Esc（cancelOperation）时回调，由 `AppDelegate` 用于收起面板。
     var onCancel: (() -> Void)?
 
+    private var contentLayout: PanelLayout?
+    private var configuredContentSize: NSSize?
+
+    /// 屏幕尺寸只影响窗口几何，不应销毁已预热的 SwiftUI 内容与列表状态。
+    func configureContent(layout: PanelLayout, size: NSSize,
+                          makeController: () -> NSViewController) {
+        let needsContent = contentLayout != layout || contentViewController == nil
+        if needsContent {
+            contentViewController = makeController()
+            contentLayout = layout
+        }
+        // 配置未变化时保留用户手动调整的窗口尺寸。
+        if needsContent || configuredContentSize != size {
+            setContentSize(size)
+            contentViewController?.view.frame = CGRect(origin: .zero, size: size)
+            configuredContentSize = size
+        }
+    }
+
     init(contentRect: NSRect) {
         super.init(contentRect: contentRect,
                    styleMask: [.titled, .fullSizeContentView, .nonactivatingPanel, .resizable],

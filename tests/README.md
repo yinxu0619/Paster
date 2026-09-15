@@ -7,7 +7,7 @@ bash tests/macos-test.sh
 ```
 
 They exercise the production model, image processing, selection rules, privacy filters,
-window level and SwiftData persistence. The intentionally corrupt test database emits
+window level, panel content reuse across display sizes, and SwiftData persistence. The intentionally corrupt test database emits
 Core Data errors; the test verifies that its original bytes survive and the temporary
 fallback still works. All databases and executables are created in temporary directories.
 The general clipboard and the user's history are never changed.
@@ -33,6 +33,10 @@ Windows (`windows/scripts/build.ps1` and `windows/scripts/smoke-test.ps1`).
 
 Manual acceptance checks:
 
+- macOS: alternate hotkey invocation between displays with different resolutions and
+  scaling (including Retina/non-Retina), in bar, sidebar and cursor modes. The panel
+  should fit the target display without resetting selection or pausing to rebuild
+  content. Also verify bar height changes and switching between bar/vertical layouts.
 - macOS: bottom/top panel with Dock visible and auto-hide enabled; overlap must stay above
   the Dock. Repeat on another display, with the Dock on either side, and in full screen.
   Menus must still appear above the panel and clicking outside must dismiss it.

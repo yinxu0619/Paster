@@ -16,12 +16,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var previewWindow: NSWindow?
     private var settingsWindow: NSWindow?
 
-    /// 面板操作集合，缓存以便每次呼出时按当前布局重建内容。
+    /// 面板操作集合，缓存供创建内容时使用。
     private var panelActions: PanelActions?
-
-    /// 当前面板内容对应的配置签名（呼出位置/屏幕尺寸/横条高度）。
-    /// 仅在签名变化时才重建 SwiftUI 内容，避免每次呼出都新建 NSHostingController 造成延迟。
-    private var contentSignature: String?
 
     /// 呼出面板前记录的前台应用，用于粘贴后把焦点交还给它。
     private var previousApp: NSRunningApplication?
@@ -205,7 +201,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.delegate = self
         panel.onCancel = { [weak self] in self?.hidePanel() }
         self.panel = panel
-        configurePanelContent(panel)
+        configurePanelContent(panel, screen: currentScreen())
         prewarmPanel(panel)
     }
 
@@ -223,51 +219,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// 依据当前呼出位置设置面板尺寸与布局：上下边缘 → 全宽横向平铺条；其余 → 竖向卡片。
     ///
-    /// 性能关键：仅当「呼出位置 / 屏幕尺寸 / 横条高度」变化时才重建 SwiftUI 内容
-    /// （新建 NSHostingController 并重新拉取历史记录较慢，约 0.x 秒）。配置未变时直接
-    /// 复用已建好的内容，呼出只做定位与动画，实现按键即出。
-    private func configurePanelContent(_ panel: FloatingPanel) {
+    /// 仅在横条与竖向列表互换时重建内容；跨屏或调整高度只更新尺寸，复用预热后的视图。
+    private func configurePanelContent(_ panel: FloatingPanel, screen: NSScreen?) {
         guard let actions = panelActions else { return }
         let position = AppSettings.shared.panelPosition
         let isBar = (position == .bottom || position == .top)
         let isSide = (position == .left || position == .right)
-        let visible = currentScreen()?.visibleFrame ?? NSScreen.main?.visibleFrame ?? .zero
+        let visible = screen?.visibleFrame ?? .zero
         // 横向条按用户选择停靠到真实屏幕边缘（含 Dock/菜单栏区域）或可用区域内。
-        let barRegion = barLayoutRegion()
+        let barRegion = barLayoutRegion(on: screen)
         let barHeight = CGFloat(AppSettings.shared.barHeight)
         let attachEdge = AppSettings.shared.barAttachToScreenEdge
 
-        let signature = "\(position.rawValue)|\(Int(visible.width))x\(Int(visible.height))|\(Int(barRegion.width))|\(Int(barHeight))|\(attachEdge)"
-        // 配置未变化且内容已存在：复用，跳过昂贵的重建。
-        if signature == contentSignature, panel.contentViewController != nil {
-            return
-        }
-        contentSignature = signature
-
-        // 忽略顶部安全区：.titled 面板会为标题栏预留 ~32pt 安全区，导致内容整体下移，
-        // 顶部停靠时表现为"没贴顶、有条缝"。这里让内容填满到窗口最上沿。
-        let rootView = PanelRootView(actions: actions, layout: isBar ? .bar : .vertical)
-            .ignoresSafeArea(edges: .top)
-            .modelContainer(PersistenceManager.shared.container)
-        let hosting = NSHostingController(rootView: rootView)
-        // 关闭 SwiftUI 内容反向驱动窗口尺寸，否则横向条 / 满高侧栏会被收缩成内容最小尺寸。
-        hosting.sizingOptions = []
-        panel.contentViewController = hosting
-
-        // 内容控制器设置后再指定尺寸：
-        // - 上/下：铺满屏宽，高度可调；
-        // - 左/右：占满屏幕高度的竖向侧栏；
-        // - 光标/居中：固定 360×480。
+        let size: NSSize
         if isBar {
             // 贴屏幕边缘时铺满整屏宽；停靠在可用区域内时两侧留出小边距。
             let width = attachEdge ? barRegion.width : max(480, barRegion.width - 24)
-            panel.setContentSize(NSSize(width: width, height: barHeight))
+            size = NSSize(width: width, height: barHeight)
         } else if isSide {
-            panel.setContentSize(NSSize(width: 360, height: visible.height))
+            size = NSSize(width: 360, height: visible.height)
         } else {
-            panel.setContentSize(NSSize(width: 360, height: 480))
+            size = NSSize(width: 360, height: 480)
         }
-        hosting.view.frame = CGRect(origin: .zero, size: panel.frame.size)
+        let layout: PanelLayout = isBar ? .bar : .vertical
+        panel.configureContent(layout: layout, size: size) {
+            // 忽略标题栏安全区，让内容填满到窗口最上沿。
+            let rootView = PanelRootView(actions: actions, layout: layout)
+                .ignoresSafeArea(edges: .top)
+                .modelContainer(PersistenceManager.shared.container)
+            let hosting = NSHostingController(rootView: rootView)
+            // 尺寸由窗口决定，避免横条 / 侧栏被收缩成内容最小尺寸。
+            hosting.sizingOptions = []
+            return hosting
+        }
     }
 
     private func togglePanel() {
@@ -282,11 +266,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let panel else { return }
         previousApp = NSWorkspace.shared.frontmostApplication
 
-        // 每次呼出前按当前设置重建布局与尺寸（竖向卡片 / 全宽横向平铺）。
-        configurePanelContent(panel)
+        // 尺寸与定位使用同一块目标屏幕，跨屏时复用已有内容。
+        let screen = currentScreen()
+        configurePanelContent(panel, screen: screen)
 
         // 窗口直接定位到最终位置；滑入动画交给 GPU 加速的内容图层完成（比窗口 setFrame 更丝滑）。
-        panel.setFrameOrigin(targetOrigin(for: panel))
+        panel.setFrameOrigin(targetOrigin(for: panel, screen: screen))
         panel.alphaValue = 1
         // 先立即上屏并取得键盘焦点（非激活面板可在不切换前台应用的前提下成为 key window），
         // 再补一次应用激活。顺序很关键：把较慢的 activate 放到上屏之后，避免它阻塞面板出现。
@@ -426,20 +411,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// 横向条停靠所依据的矩形区域：
     /// - 贴屏幕边缘（`barAttachToScreenEdge`）：整块屏幕 `frame`；
     /// - 否则：去掉 Dock / 菜单栏后的可用区域 `visibleFrame`。
-    private func barLayoutRegion() -> NSRect {
-        let screen = currentScreen() ?? NSScreen.main
+    private func barLayoutRegion(on screen: NSScreen?) -> NSRect {
         if AppSettings.shared.barAttachToScreenEdge {
-            return screen?.frame ?? NSScreen.main?.frame ?? .zero
+            return screen?.frame ?? .zero
         }
-        return screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? .zero
+        return screen?.visibleFrame ?? .zero
     }
 
     /// 根据用户选择的呼出位置，计算面板最终的左下角坐标，并确保不超出可见区域。
-    private func targetOrigin(for panel: NSPanel) -> NSPoint {
+    private func targetOrigin(for panel: NSPanel, screen: NSScreen?) -> NSPoint {
         let size = panel.frame.size
-        guard let visible = currentScreen()?.visibleFrame else { return panel.frame.origin }
+        guard let visible = screen?.visibleFrame else { return panel.frame.origin }
         // 横向条按开关决定贴真实屏幕边缘还是可用区域内。
-        let bar = barLayoutRegion()
+        let bar = barLayoutRegion(on: screen)
         let gap: CGFloat = 12
 
         switch AppSettings.shared.panelPosition {
