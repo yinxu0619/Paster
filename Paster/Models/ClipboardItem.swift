@@ -22,8 +22,15 @@ final class ClipboardItem {
     /// 富文本原始 RTF 数据（仅富文本类型）。
     var rtfData: Data? = nil
 
-    /// 图片原图数据（PNG，仅图片类型）。
-    var imageData: Data? = nil
+    /// 旧版本把图片原图直接存在本实体的 `imageData` 列里。SwiftData 拉取模型时会加载
+    /// 全部属性，列表每次刷新（删除 / 新增记录后 `@Query` 重新拉取）都要把所有原图读进
+    /// 内存（几十到几百 MB），表现为删除记录明显卡顿。现改为独立实体 `ClipboardImage`
+    /// 通过关系惰性加载；旧列改名保留，启动时由 `PersistenceManager.migrateLegacyImages`
+    /// 分批搬迁后清空。业务代码一律走下面的 `imageData` 计算属性，不直接读写此列。
+    @Attribute(originalName: "imageData") var legacyImageData: Data? = nil
+
+    /// 图片原图（仅图片类型），按需加载。
+    @Relationship(deleteRule: .cascade, inverse: \ClipboardImage.item) var image: ClipboardImage? = nil
 
     /// 图片缩略图数据（PNG，用于列表快速预览，避免加载原图）。
     var thumbnailData: Data? = nil
@@ -51,6 +58,20 @@ final class ClipboardItem {
 
     /// 复制时间戳。
     var createdAt: Date = Date()
+
+    /// 图片原图数据（PNG，仅图片类型）。读取时优先取独立实体，兼容尚未搬迁的旧列。
+    var imageData: Data? {
+        get { image?.data ?? legacyImageData }
+        set {
+            legacyImageData = nil
+            if let newValue {
+                if let image { image.data = newValue } else { image = ClipboardImage(data: newValue) }
+            } else if let old = image {
+                image = nil
+                old.modelContext?.delete(old)
+            }
+        }
+    }
 
     /// 类型的便捷访问器。
     var type: ClipboardItemType {
@@ -81,13 +102,30 @@ final class ClipboardItem {
         self.typeRaw = type.rawValue
         self.text = text
         self.rtfData = rtfData
-        self.imageData = imageData
         self.thumbnailData = thumbnailData
         self.fileURLString = fileURLString
         self.urlString = urlString
         self.sourceAppName = sourceAppName
         self.sourceBundleID = sourceBundleID
         self.createdAt = createdAt
+        // 关系须在其它存储属性初始化完毕后再建立。
+        if let imageData { self.image = ClipboardImage(data: imageData) }
+    }
+}
+
+/// 图片原图的独立存储实体。与 `ClipboardItem` 一对一，随记录级联删除。
+///
+/// 拆出来的唯一目的就是让列表拉取 `ClipboardItem` 时不用连带读出原图。
+@Model
+final class ClipboardImage {
+    /// PNG 原图数据。
+    var data: Data = Data()
+
+    /// 所属记录（反向关系，由 `ClipboardItem.image` 声明 inverse）。
+    var item: ClipboardItem? = nil
+
+    init(data: Data) {
+        self.data = data
     }
 }
 

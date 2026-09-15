@@ -118,7 +118,7 @@ struct MacOSRegression {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("PasterRegression-\(UUID())")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
-        let schema = Schema([ClipboardItem.self])
+        let schema = PersistenceManager.schema
         let badStore = root.appendingPathComponent("corrupt.store")
         let original = Data("Preserve this original database even when opening fails".utf8)
         try original.write(to: badStore)
@@ -142,6 +142,52 @@ struct MacOSRegression {
         let rows = try reopened.mainContext.fetch(FetchDescriptor<ClipboardItem>())
         check(rows.count == 2, "History survives reopening")
         check(rows.first(where: { $0.isPinned })?.deduplicationKey == first.deduplicationKey, "Pinned image digest survives reopening")
+        try checkImageStorage(root: root)
         print("PASS: \(checks) macOS regression checks")
+    }
+
+    /// Full-size images live in their own entity so list fetches never load them, and rows
+    /// written by older versions into the inline column are moved over on open.
+    static func checkImageStorage(root: URL) throws {
+        let schema = PersistenceManager.schema
+        let store = root.appendingPathComponent("images.store")
+        let large = Data(repeating: 0xAB, count: 512_000)
+        // Keep the manager alive: its container owns the context used below.
+        let initial = PersistenceManager(configuration: ModelConfiguration(schema: schema, url: store))
+        let context = initial.mainContext
+        let fresh = ClipboardItem(type: .image, imageData: large, thumbnailData: png(red: 1))
+        check(fresh.imageData == large, "Image is readable before the item is inserted")
+        context.insert(fresh)
+        // Simulate a row persisted by an older version: bytes still in the legacy inline column.
+        let legacy = ClipboardItem(type: .image, thumbnailData: png(red: 2))
+        legacy.legacyImageData = large
+        context.insert(legacy)
+        let orphan = ClipboardImage(data: large)
+        context.insert(orphan)
+        try context.save()
+
+        let reopened = PersistenceManager(configuration: ModelConfiguration(schema: schema, url: store))
+        let ctx = reopened.mainContext
+        func imageRows() throws -> Int { try ctx.fetchCount(FetchDescriptor<ClipboardImage>()) }
+        let legacyRows = try ctx.fetchCount(FetchDescriptor<ClipboardItem>(predicate: #Predicate { $0.legacyImageData != nil }))
+        check(legacyRows == 0, "Opening the store moves legacy inline images out of the item row")
+        let afterOpen = try imageRows()
+        check(afterOpen == 2, "One image row per item; orphans are removed on open")
+        let items = try ctx.fetch(FetchDescriptor<ClipboardItem>())
+        check(items.count == 2 && items.allSatisfy { $0.imageData == large }, "Both images stay readable after migration")
+        check(reopened.migrateLegacyImages() == 0, "Migration is idempotent")
+
+        for item in items { ctx.delete(item) }
+        try ctx.save()
+        let afterDelete = try imageRows()
+        check(afterDelete == 0, "Deleting an item cascades to its image")
+
+        let replaced = ClipboardItem(type: .image, imageData: large)
+        ctx.insert(replaced)
+        replaced.imageData = Data([1, 2, 3])
+        replaced.imageData = nil
+        try ctx.save()
+        let afterClear = try imageRows()
+        check(afterClear == 0, "Replacing or clearing an image leaves no stray rows")
     }
 }

@@ -7,7 +7,8 @@ bash tests/macos-test.sh
 ```
 
 They exercise the production model, image processing, selection rules, privacy filters,
-window level, panel content reuse across display sizes, and SwiftData persistence. The intentionally corrupt test database emits
+window level, panel content reuse across display sizes, SwiftData persistence, and the
+separate image storage (legacy inline images are migrated on open and cascade on delete). The intentionally corrupt test database emits
 Core Data errors; the test verifies that its original bytes survive and the temporary
 fallback still works. All databases and executables are created in temporary directories.
 The general clipboard and the user's history are never changed.
