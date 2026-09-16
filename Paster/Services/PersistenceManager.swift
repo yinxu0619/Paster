@@ -34,6 +34,7 @@ final class PersistenceManager {
         if storageError == nil {
             migrateLegacyImages()
             regenerateOversizedThumbnails()
+            compactStorageIfWorthwhile()
         }
     }
 

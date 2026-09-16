@@ -7,10 +7,48 @@ final class SettingsViewModel: ObservableObject {
     /// 当前运行的常规应用（供排除列表选择）。
     @Published var runningApps: [RunningAppInfo] = []
 
+    /// 存储占用统计；临时存储时为 nil。
+    @Published var storageStats: StorageStats?
+    /// 已解码缩略图缓存条数。
+    @Published var thumbnailCacheCount = 0
+    /// 最近一次整理的结果提示。
+    @Published var compactMessage: String?
+
     private let context = PersistenceManager.shared.mainContext
 
     init() {
         refreshRunningApps()
+        refreshStorageStats()
+    }
+
+    func refreshStorageStats() {
+        storageStats = PersistenceManager.shared.storageStats()
+        thumbnailCacheCount = ThumbnailCache.shared.count
+    }
+
+    /// VACUUM 回收空闲空间并刷新统计。
+    func compactStorage() {
+        if let freed = PersistenceManager.shared.compactStorage() {
+            compactMessage = freed > 0
+                ? L10n.tr("settings.compactResult", Self.format(bytes: freed))
+                : L10n.tr("settings.compactNothing")
+        } else {
+            compactMessage = L10n.tr("settings.compactFailed")
+        }
+        refreshStorageStats()
+    }
+
+    func clearThumbnailCache() {
+        ThumbnailCache.shared.removeAll()
+        refreshStorageStats()
+    }
+
+    func revealStorageInFinder() {
+        NSWorkspace.shared.activateFileViewerSelecting([PersistenceManager.shared.storeURL])
+    }
+
+    static func format(bytes: Int) -> String {
+        ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
     }
 
     /// 一键清空全部历史，保留置顶记录（与 `ClipboardViewModel.clearAll` 语义一致）。
@@ -22,6 +60,7 @@ final class SettingsViewModel: ObservableObject {
         } catch {
             NSLog("[Paster] 清空历史失败: \(error.localizedDescription)")
         }
+        refreshStorageStats()
     }
 
     /// 刷新当前运行的常规应用列表。

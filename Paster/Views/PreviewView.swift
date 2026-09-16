@@ -55,7 +55,8 @@ struct PreviewView: View {
 
     @ViewBuilder
     private var imagePreview: some View {
-        if let data = item.imageData, let nsImage = NSImage(data: data) {
+        // 用临时上下文读原图，关闭预览后原图随之释放，而不是挂在记录上直到退出。
+        if let data = item.detachedImageData(), let nsImage = NSImage(data: data) {
             ScrollView([.horizontal, .vertical]) {
                 Image(nsImage: nsImage)
                     .resizable()

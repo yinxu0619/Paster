@@ -19,7 +19,8 @@ final class PasteService {
 
         switch item.type {
         case .image:
-            if let data = item.imageData, let image = NSImage(data: data) {
+            // 用临时上下文读原图，粘贴完不让几 MB 的原图留在主上下文里。
+            if let data = item.detachedImageData(), let image = NSImage(data: data) {
                 pasteboard.writeObjects([image])
             }
         case .file:

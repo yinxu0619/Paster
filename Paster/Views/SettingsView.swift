@@ -143,8 +143,70 @@ struct SettingsView: View {
                     Button(L10n.tr("settings.cancel"), role: .cancel) {}
                 }
             }
+
+            storageSection
         }
         .formStyle(.grouped)
+        .onAppear { viewModel.refreshStorageStats() }
+    }
+
+    // MARK: - 存储
+
+    /// 数据文件占用、可回收空间、解码缓存，以及整理 / 清缓存 / 定位文件三个动作。
+    @ViewBuilder
+    private var storageSection: some View {
+        Section(L10n.tr("settings.storage")) {
+            if let stats = viewModel.storageStats {
+                LabeledContent(L10n.tr("settings.storageFile")) {
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text(SettingsViewModel.format(bytes: stats.fileBytes))
+                        Text(L10n.tr("settings.storageReclaimable", SettingsViewModel.format(bytes: stats.reclaimableBytes)))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                LabeledContent(L10n.tr("settings.storageItems", stats.itemCount, stats.imageCount)) {
+                    Text(L10n.tr("settings.storageImageBytes",
+                                 SettingsViewModel.format(bytes: stats.imageBytes),
+                                 SettingsViewModel.format(bytes: stats.thumbnailBytes)))
+                        .foregroundStyle(.secondary)
+                }
+            } else {
+                Text(L10n.tr("settings.storageUnavailable"))
+                    .foregroundStyle(.secondary)
+            }
+            LabeledContent(L10n.tr("settings.storageCache")) {
+                Text(L10n.tr("settings.storageCacheCount", viewModel.thumbnailCacheCount))
+                    .foregroundStyle(.secondary)
+            }
+            HStack {
+                Button {
+                    viewModel.compactStorage()
+                } label: {
+                    Label(L10n.tr("settings.compactStorage"), systemImage: "arrow.down.right.and.arrow.up.left")
+                }
+                .disabled(viewModel.storageStats == nil)
+                Button {
+                    viewModel.clearThumbnailCache()
+                } label: {
+                    Label(L10n.tr("settings.clearThumbnailCache"), systemImage: "photo.on.rectangle")
+                }
+                .disabled(viewModel.thumbnailCacheCount == 0)
+                Spacer()
+                Button(L10n.tr("settings.showStorageFolder")) {
+                    viewModel.revealStorageInFinder()
+                }
+                .disabled(viewModel.storageStats == nil)
+            }
+            if let message = viewModel.compactMessage {
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Text(L10n.tr("settings.compactHint"))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
     }
 
     /// 高度可视化预览：示意屏幕中横向条所占高度比例。

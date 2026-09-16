@@ -238,5 +238,65 @@ struct MacOSRegression {
         cache.invalidate(items[0].id)
         _ = cache.image(for: items[0].id, data: decode())
         check(decodes == 2, "Invalidation forces a fresh decode")
+        try checkStorageMaintenance(root: root)
+    }
+
+    /// Storage statistics, VACUUM with the container open, detached image reads and the
+    /// decoded-cache counter behind the Settings storage section.
+    static func checkStorageMaintenance(root: URL) throws {
+        let schema = PersistenceManager.schema
+        let store = root.appendingPathComponent("maintenance.store")
+        let manager = PersistenceManager(configuration: ModelConfiguration(schema: schema, url: store))
+        let ctx = manager.mainContext
+        let blob = Data(repeating: 0x5A, count: 400_000)
+        let thumb = png(red: 9)
+        var items: [ClipboardItem] = []
+        for _ in 0..<12 {
+            let item = ClipboardItem(type: .image, imageData: blob, thumbnailData: thumb)
+            ctx.insert(item)
+            items.append(item)
+        }
+        ctx.insert(ClipboardItem(text: "plain"))
+        try ctx.save()
+
+        let stats = manager.storageStats()!
+        check(stats.itemCount == 13 && stats.imageCount == 12, "Statistics count items and images")
+        check(stats.imageBytes == 12 * blob.count && stats.thumbnailBytes == 12 * thumb.count,
+              "Statistics sum image and thumbnail bytes via SQL")
+        check(stats.fileBytes > stats.imageBytes, "File size includes stored data")
+
+        let detached = items[0].detachedImageData()
+        check(detached == blob, "Detached read returns the full original")
+        check(ClipboardItem(type: .image, imageData: blob).detachedImageData() == blob,
+              "Detached read falls back to memory before insertion")
+
+        for item in items.dropFirst(2) { ctx.delete(item) }
+        try ctx.save()
+        let afterDelete = manager.storageStats()!
+        check(afterDelete.imageCount == 2 && afterDelete.reclaimableBytes > 0, "Deleted rows leave reclaimable pages")
+        let freed = manager.compactStorage()
+        check(freed != nil && freed! > 0, "VACUUM with the container open shrinks the file")
+        let compacted = manager.storageStats()!
+        check(compacted.reclaimableBytes == 0 && compacted.fileBytes < afterDelete.fileBytes, "Compaction reclaims free pages")
+        let survivors = try ctx.fetch(FetchDescriptor<ClipboardItem>(predicate: #Predicate { $0.typeRaw == "image" }))
+        check(survivors.count == 2 && survivors.allSatisfy { $0.imageData == blob }, "Data survives compaction")
+        ctx.insert(ClipboardItem(type: .image, imageData: blob))
+        try ctx.save()
+        check(manager.storageStats()!.imageCount == 3, "The container keeps working after compaction")
+        let reopened = PersistenceManager(configuration: ModelConfiguration(schema: schema, url: store))
+        let reopenedImages = try reopened.mainContext.fetchCount(FetchDescriptor<ClipboardImage>())
+        check(reopened.storageError == nil && reopenedImages == 3, "Compacted store reopens cleanly")
+
+        let cache = ThumbnailCache.shared
+        cache.removeAll()
+        check(cache.count == 0, "Cleared cache reports zero entries")
+        _ = cache.image(for: items[0].id, data: thumb)
+        _ = cache.image(for: items[1].id, data: thumb)
+        _ = cache.image(for: items[1].id, data: thumb)
+        check(cache.count == 2, "Cache counts distinct decoded images")
+        cache.invalidate(items[0].id)
+        check(cache.count == 1, "Invalidation updates the counter")
+        cache.removeAll()
+        check(cache.count == 0, "Clearing the cache resets the counter")
     }
 }

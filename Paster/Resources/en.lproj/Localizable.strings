@@ -37,6 +37,23 @@
 "settings.clear" = "Clear All";
 "settings.cancel" = "Cancel";
 
+/* Storage settings */
+"settings.storage" = "Storage";
+"settings.storageFile" = "Database file";
+"settings.storageReclaimable" = "%@ reclaimable";
+"settings.storageItems" = "%d items · %d images";
+"settings.storageImageBytes" = "Originals %@ · thumbnails %@";
+"settings.storageCache" = "Decoded thumbnail cache";
+"settings.storageCacheCount" = "%d images";
+"settings.storageUnavailable" = "Temporary storage is in use; statistics are unavailable.";
+"settings.compactStorage" = "Compact Storage";
+"settings.clearThumbnailCache" = "Clear Decoded Cache";
+"settings.showStorageFolder" = "Show in Finder";
+"settings.compactResult" = "Freed %@.";
+"settings.compactNothing" = "Nothing to reclaim.";
+"settings.compactFailed" = "Compaction failed. Please try again later.";
+"settings.compactHint" = "Reclaims space left behind by deleted items. Also runs automatically at launch when a lot of space is free.";
+
 /* Privacy settings */
 "settings.excludedApps" = "Excluded Apps";
 "settings.excludedAppsHint" = "Clipboard content from these apps will not be recorded (e.g. password managers).";

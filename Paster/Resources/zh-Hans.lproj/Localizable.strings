@@ -37,6 +37,23 @@
 "settings.clear" = "清空全部";
 "settings.cancel" = "取消";
 
+/* Storage settings */
+"settings.storage" = "存储";
+"settings.storageFile" = "数据文件";
+"settings.storageReclaimable" = "可回收 %@";
+"settings.storageItems" = "%d 条记录 · %d 张图片";
+"settings.storageImageBytes" = "原图 %@ · 缩略图 %@";
+"settings.storageCache" = "已解码缩略图缓存";
+"settings.storageCacheCount" = "%d 张";
+"settings.storageUnavailable" = "当前使用临时存储，统计不可用。";
+"settings.compactStorage" = "整理存储";
+"settings.clearThumbnailCache" = "清空解码缓存";
+"settings.showStorageFolder" = "在 Finder 中显示";
+"settings.compactResult" = "已释放 %@。";
+"settings.compactNothing" = "没有可回收的空间。";
+"settings.compactFailed" = "整理失败，请稍后重试。";
+"settings.compactHint" = "回收删除记录后留下的空闲空间。启动时若空闲空间较多也会自动整理。";
+
 /* Privacy settings */
 "settings.excludedApps" = "排除应用";
 "settings.excludedAppsHint" = "以下应用复制的内容不会被记录（适用于密码管理器等敏感应用）。";
