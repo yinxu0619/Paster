@@ -11,6 +11,9 @@ public sealed class ClipboardViewModel : INotifyPropertyChanged
     private static readonly TimeSpan SearchDebounce = TimeSpan.FromMilliseconds(120);
 
     private readonly ClipboardDatabase _database;
+
+    /// <summary>Storage statistics and compaction for the Settings window.</summary>
+    public ClipboardDatabase Database => _database;
     private readonly AppSettings _settings;
     private readonly PasteService _pasteService;
     private CancellationTokenSource? _pendingSearch;

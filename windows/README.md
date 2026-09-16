@@ -21,7 +21,8 @@ Implemented in `src/Paster.Windows`:
 - Virtualised card list (`ItemsRepeater`) with pinned / history sections, relative timestamps, image thumbnails, hover and selection states, and smooth inertial wheel scrolling on both axes.
 - Search with debounce, keyboard navigation (`←→` / `↑↓`, `Home`/`End`), Enter paste, `Ctrl+Shift+Enter` plain paste, `Del` delete, `Ctrl+P` pin, `Esc` hide, and a right-click card menu.
 - Paste by writing the Windows clipboard and sending `Ctrl+V` with `SendInput` to the previously focused window.
-- Settings window: language, panel position, bar height, animation bounciness, frosted-glass (acrylic) toggle and opacity, history limit, clear all, and launch at login via `HKCU\...\Run`.
+- Settings window: language, panel position, bar height, animation bounciness, frosted-glass (acrylic) toggle and opacity, history limit, clear all, storage statistics with compact / clear decoded cache / show in Explorer, and launch at login via `HKCU\...\Run`.
+- Storage hygiene: 240px JPEG thumbnails, background regeneration of oversized legacy thumbnails, and automatic `VACUUM` at launch when free space is large.
 - System tray icon with a context menu (Show History, Clear History, Settings, Quit).
 - Light and dark theme support, following the system theme at runtime.
 - Simplified Chinese and English, following the system language or an explicit choice.

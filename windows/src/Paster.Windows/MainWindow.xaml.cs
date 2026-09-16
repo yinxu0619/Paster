@@ -253,7 +253,7 @@ public sealed partial class MainWindow : Window
                 ApplyBackdrop();
                 _cardsDirty = true;
                 RequestRender();
-            }, HotKeys);
+            }, HotKeys, () => _previewCache.Count, ClearPreviewCache);
             _settingsWindow.Closed += (_, _) => _settingsWindow = null;
         }
 
@@ -1385,6 +1385,15 @@ public sealed partial class MainWindow : Window
     }
 
     // MARK: - Preview cache
+
+    /// <summary>Drops every decoded thumbnail; visible cards decode again on the next render.</summary>
+    private void ClearPreviewCache()
+    {
+        _previewCache.Clear();
+        _previewOrder.Clear();
+        _cardsDirty = true;
+        RequestRender();
+    }
 
     private bool TryGetPreview(Guid id, out BitmapImage bitmap)
     {

@@ -10,6 +10,7 @@ using Paster.Windows.Native;
 using Paster.Windows.Services;
 using Paster.Windows.Utilities;
 using Paster.Windows.ViewModels;
+using System.Diagnostics;
 using System.Globalization;
 using Windows.Graphics;
 using Windows.System;
@@ -42,6 +43,14 @@ public sealed class SettingsWindow : Window
     private readonly HotKeyService? _hotKeys;
     private readonly Button _hotKeyButton = new();
     private readonly Button _clearHistoryButton = new();
+    private readonly TextBlock _storageFileText = new();
+    private readonly TextBlock _storageItemsText = new();
+    private readonly TextBlock _storageCacheText = new();
+    private readonly Button _compactButton = new();
+    private readonly Button _clearCacheButton = new();
+    private readonly Func<int>? _previewCacheCount;
+    private readonly Action? _clearPreviewCache;
+    private bool _compacting;
     private bool _confirmingClear;
     private bool _recordingHotKey;
     private bool _suppressLaunchAtLoginToggle;
@@ -49,15 +58,26 @@ public sealed class SettingsWindow : Window
                               (_settings.Language == AppLanguage.System &&
                                CultureInfo.CurrentUICulture.TwoLetterISOLanguageName.Equals("zh", StringComparison.OrdinalIgnoreCase));
 
-    public SettingsWindow(AppSettings settings, ClipboardViewModel viewModel, Action onSettingsChanged, HotKeyService? hotKeys)
+    public SettingsWindow(AppSettings settings, ClipboardViewModel viewModel, Action onSettingsChanged, HotKeyService? hotKeys,
+        Func<int>? previewCacheCount = null, Action? clearPreviewCache = null)
     {
         _settings = settings;
         _viewModel = viewModel;
         _onSettingsChanged = onSettingsChanged;
         _hotKeys = hotKeys;
+        _previewCacheCount = previewCacheCount;
+        _clearPreviewCache = clearPreviewCache;
         Title = T("Paster Settings", "Paster 设置");
         Content = BuildContent();
         ConfigureWindow();
+        // The window is kept alive between openings; refresh the numbers whenever it comes back.
+        Activated += (_, e) =>
+        {
+            if (e.WindowActivationState != WindowActivationState.Deactivated)
+            {
+                _ = RefreshStorageStatsAsync();
+            }
+        };
     }
 
     private UIElement BuildContent()
@@ -224,6 +244,8 @@ public sealed class SettingsWindow : Window
             _clearHistoryButton
         }));
 
+        panel.Children.Add(BuildStorageSection());
+
         panel.Children.Add(Section(T("About", "关于"), new UIElement[]
         {
             new TextBlock
@@ -262,6 +284,146 @@ public sealed class SettingsWindow : Window
         panel.Children.Add(_statusText);
 
         return root;
+    }
+
+    // MARK: - Storage
+
+    /// <summary>
+    /// Database size and reclaimable space, row / image counts with blob totals, the decoded
+    /// thumbnail cache, and the compact / clear-cache / reveal actions.
+    /// </summary>
+    private Border BuildStorageSection()
+    {
+        foreach (var text in new[] { _storageFileText, _storageItemsText, _storageCacheText })
+        {
+            text.TextWrapping = TextWrapping.Wrap;
+            text.Foreground = ThemeBrushes.PrimaryText;
+        }
+        _storageFileText.Text = T("Reading storage statistics…", "正在读取存储统计…");
+
+        _compactButton.Content = T("Compact Storage", "整理存储");
+        _compactButton.Click += async (_, _) => await CompactStorageAsync();
+
+        _clearCacheButton.Content = T("Clear Decoded Cache", "清空解码缓存");
+        _clearCacheButton.IsEnabled = false;
+        _clearCacheButton.Click += (_, _) =>
+        {
+            _clearPreviewCache?.Invoke();
+            RefreshCacheText();
+            _statusText.Text = T("Decoded thumbnail cache cleared.", "已清空解码缓存。");
+        };
+
+        var revealButton = new Button { Content = T("Show in Explorer", "在资源管理器中显示") };
+        revealButton.Click += (_, _) => RevealDatabase();
+
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        buttons.Children.Add(_compactButton);
+        buttons.Children.Add(_clearCacheButton);
+        buttons.Children.Add(revealButton);
+
+        return Section(T("Storage", "存储"), new UIElement[]
+        {
+            _storageFileText,
+            _storageItemsText,
+            _storageCacheText,
+            buttons,
+            new TextBlock
+            {
+                Text = T(
+                    "Compacting reclaims space left behind by deleted items. It also runs automatically at launch when a lot of space is free.",
+                    "整理会回收删除记录后留下的空闲空间。启动时若空闲空间较多也会自动整理。"),
+                TextWrapping = TextWrapping.Wrap,
+                FontSize = 12,
+                Foreground = ThemeBrushes.TertiaryText
+            }
+        });
+    }
+
+    private async Task RefreshStorageStatsAsync()
+    {
+        try
+        {
+            var stats = await _viewModel.Database.GetStorageStatsAsync();
+            _storageFileText.Text = T(
+                $"Database file: {FormatBytes(stats.FileBytes)} ({FormatBytes(stats.ReclaimableBytes)} reclaimable)",
+                $"数据文件：{FormatBytes(stats.FileBytes)}（可回收 {FormatBytes(stats.ReclaimableBytes)}）");
+            _storageItemsText.Text = T(
+                $"{stats.ItemCount} items · {stats.ImageCount} images (originals {FormatBytes(stats.ImageBytes)}, thumbnails {FormatBytes(stats.ThumbnailBytes)})",
+                $"{stats.ItemCount} 条记录 · {stats.ImageCount} 张图片（原图 {FormatBytes(stats.ImageBytes)} · 缩略图 {FormatBytes(stats.ThumbnailBytes)}）");
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error("Could not read storage statistics.", ex);
+            _storageFileText.Text = T("Storage statistics are unavailable.", "存储统计不可用。");
+            _storageItemsText.Text = string.Empty;
+        }
+
+        RefreshCacheText();
+    }
+
+    private void RefreshCacheText()
+    {
+        var count = _previewCacheCount?.Invoke() ?? 0;
+        _storageCacheText.Text = T($"Decoded thumbnail cache: {count} images", $"已解码缩略图缓存：{count} 张");
+        _clearCacheButton.IsEnabled = count > 0;
+    }
+
+    private async Task CompactStorageAsync()
+    {
+        if (_compacting)
+        {
+            return;
+        }
+
+        _compacting = true;
+        _compactButton.IsEnabled = false;
+        try
+        {
+            var freed = await _viewModel.Database.CompactAsync();
+            _statusText.Text = freed > 0
+                ? T($"Freed {FormatBytes(freed)}.", $"已释放 {FormatBytes(freed)}。")
+                : T("Nothing to reclaim.", "没有可回收的空间。");
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error("Storage compaction failed.", ex);
+            _statusText.Text = T("Compaction failed. Please try again later.", "整理失败，请稍后重试。");
+        }
+        finally
+        {
+            _compacting = false;
+            _compactButton.IsEnabled = true;
+            await RefreshStorageStatsAsync();
+        }
+    }
+
+    private void RevealDatabase()
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{_viewModel.Database.DatabasePath}\"")
+            {
+                UseShellExecute = false
+            });
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error("Could not open the storage folder.", ex);
+        }
+    }
+
+    private static string FormatBytes(long bytes)
+    {
+        string[] units = ["B", "KB", "MB", "GB"];
+        double value = bytes;
+        var unit = 0;
+        while (value >= 1024 && unit < units.Length - 1)
+        {
+            value /= 1024;
+            unit++;
+        }
+
+        return unit == 0 ? $"{bytes} B" : $"{value:0.#} {units[unit]}";
     }
 
     /// <summary>

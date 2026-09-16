@@ -3,13 +3,14 @@ using Paster.Windows.Utilities;
 namespace Paster.Windows.Services;
 
 /// <summary>
-/// Rewrites image rows captured before thumbnails were downscaled, where ThumbnailData was a
-/// verbatim copy of the full-size screenshot. Runs on a background thread and is safe to abandon
-/// halfway: each row is committed independently and the query re-selects whatever is left.
+/// Rewrites image rows whose thumbnail is oversized: captured before thumbnails were downscaled
+/// (a verbatim copy of the screenshot) or encoded as PNG by earlier builds. Runs on a background
+/// thread and is safe to abandon halfway: each row is committed independently and the query
+/// re-selects whatever is left. Afterwards the database is compacted when worthwhile.
 /// </summary>
 public static class ImageStorageMigration
 {
-    private const int ThumbnailByteThreshold = 200 * 1024;
+    private const int ThumbnailByteThreshold = ImageUtils.OversizedThumbnailBytes;
     private static readonly TimeSpan StartDelay = TimeSpan.FromSeconds(3);
 
     public static void RunInBackground(ClipboardDatabase database) => _ = Task.Run(() => RunAsync(database));
@@ -25,6 +26,11 @@ public static class ImageStorageMigration
             if (ids.Count == 0)
             {
                 AppLog.Info("Image storage migration: no oversized image rows found.");
+                var reclaimed = await database.CompactIfWorthwhileAsync();
+                if (reclaimed > 0)
+                {
+                    AppLog.Info($"Storage compaction reclaimed {reclaimed / 1024 / 1024} MB.");
+                }
                 return;
             }
 
@@ -61,10 +67,7 @@ public static class ImageStorageMigration
                 await Task.Delay(15);
             }
 
-            if (rewritten > 0)
-            {
-                await database.VacuumAsync();
-            }
+            await database.CompactIfWorthwhileAsync(force: rewritten > 0);
 
             var sizeAfter = FileSize(database.DatabasePath);
             AppLog.Info(

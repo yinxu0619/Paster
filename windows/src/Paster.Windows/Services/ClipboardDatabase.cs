@@ -40,6 +40,13 @@ public sealed class ClipboardDatabase
         return rank != 0 ? rank : right.CreatedAt.CompareTo(left.CreatedAt);
     });
 
+    /// <summary>
+    /// Automatic compaction runs at startup only when free space is both large and a real share
+    /// of the file, so a routine launch never rewrites a big database for a few hundred KB.
+    /// </summary>
+    public const long AutoCompactMinimumBytes = 20L * 1024 * 1024;
+    public const double AutoCompactMinimumRatio = 0.10;
+
     private readonly string _connectionString;
     private readonly SemaphoreSlim _operations = new(1, 1);
 
@@ -313,14 +320,65 @@ public sealed class ClipboardDatabase
     }
 
     /// <summary>
-    /// Reclaims the free pages left behind after shrinking image blobs.
+    /// Sizes for the Settings storage section. Blob totals are summed in SQL so no image is
+    /// ever read into memory for the sake of a statistic.
     /// </summary>
-    private void Vacuum()
+    private StorageStats GetStorageStats()
     {
         using var connection = OpenConnection();
-        using var command = connection.CreateCommand();
-        command.CommandText = "VACUUM";
-        command.ExecuteNonQuery();
+        long Scalar(string sql, params (string Name, object Value)[] parameters)
+        {
+            using var command = connection.CreateCommand();
+            command.CommandText = sql;
+            foreach (var (name, value) in parameters) { command.Parameters.AddWithValue(name, value); }
+            return Convert.ToInt64(command.ExecuteScalar() ?? 0L);
+        }
+
+        var pageSize = Scalar("PRAGMA page_size");
+        var freePages = Scalar("PRAGMA freelist_count");
+        var itemCount = Scalar("SELECT COUNT(*) FROM ClipboardItems");
+        var imageCount = Scalar("SELECT COUNT(*) FROM ClipboardItems WHERE Type = $type", ("$type", (int)ClipboardItemType.Image));
+        var imageBytes = Scalar("SELECT COALESCE(SUM(length(ImageData)), 0) FROM ClipboardItems");
+        var thumbnailBytes = Scalar("SELECT COALESCE(SUM(length(ThumbnailData)), 0) FROM ClipboardItems");
+        return new StorageStats(FileSizeOnDisk(), freePages * pageSize, (int)itemCount, (int)imageCount, imageBytes, thumbnailBytes);
+    }
+
+    /// <summary>
+    /// Reclaims free pages with VACUUM and returns how many bytes the files shrank by. SQLite only
+    /// moves deleted pages to a free list, so without this the file never gets smaller. In WAL
+    /// mode VACUUM first writes the whole rebuilt database into the WAL; the checkpoint folds it
+    /// back and truncates the WAL, otherwise the main file shrinks while the WAL balloons.
+    /// </summary>
+    private long Compact()
+    {
+        var before = FileSizeOnDisk();
+        using var connection = OpenConnection();
+        using (var vacuum = connection.CreateCommand())
+        {
+            vacuum.CommandText = "VACUUM";
+            vacuum.ExecuteNonQuery();
+        }
+        using (var checkpoint = connection.CreateCommand())
+        {
+            checkpoint.CommandText = "PRAGMA wal_checkpoint(TRUNCATE)";
+            checkpoint.ExecuteNonQuery();
+        }
+        return Math.Max(0, before - FileSizeOnDisk());
+    }
+
+    private long FileSizeOnDisk() => FileLength(DatabasePath) + FileLength(DatabasePath + "-wal");
+
+    private static long FileLength(string path)
+    {
+        try
+        {
+            var info = new FileInfo(path);
+            return info.Exists ? info.Length : 0;
+        }
+        catch
+        {
+            return 0;
+        }
     }
 
     // Microsoft.Data.Sqlite's Async methods perform synchronous I/O. Serialize the work on
@@ -358,8 +416,31 @@ public sealed class ClipboardDatabase
     public Task UpdateImageDataAsync(Guid id, byte[] imageData, byte[] thumbnailData) =>
         RunAsync(() => UpdateImageData(id, imageData, thumbnailData));
 
-    public Task VacuumAsync() =>
-        RunAsync(() => Vacuum());
+    public Task<StorageStats> GetStorageStatsAsync() =>
+        RunAsync(() => GetStorageStats());
+
+    public Task<long> CompactAsync() =>
+        RunAsync(() => Compact());
+
+    /// <summary>
+    /// Compacts when <paramref name="force"/> is set or the free space crosses both thresholds.
+    /// Returns the bytes freed, 0 when nothing was done.
+    /// </summary>
+    public async Task<long> CompactIfWorthwhileAsync(bool force = false)
+    {
+        if (!force)
+        {
+            var stats = await GetStorageStatsAsync().ConfigureAwait(false);
+            if (stats.FileBytes == 0 ||
+                stats.ReclaimableBytes < AutoCompactMinimumBytes ||
+                (double)stats.ReclaimableBytes / stats.FileBytes < AutoCompactMinimumRatio)
+            {
+                return 0;
+            }
+        }
+
+        return await CompactAsync().ConfigureAwait(false);
+    }
 
     private Task RunAsync(Action operation, CancellationToken cancellationToken = default) =>
         RunAsync(() => { operation(); return true; }, cancellationToken);
@@ -445,3 +526,12 @@ public sealed class ClipboardDatabase
     private static DateTimeOffset? ParseDate(string? raw) =>
         DateTimeOffset.TryParse(raw, out var value) ? value : null;
 }
+
+/// <summary>Storage usage shown in Settings. Byte counts are on-disk / in-table sizes.</summary>
+public sealed record StorageStats(
+    long FileBytes,
+    long ReclaimableBytes,
+    int ItemCount,
+    int ImageCount,
+    long ImageBytes,
+    long ThumbnailBytes);

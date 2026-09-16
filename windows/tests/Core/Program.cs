@@ -88,6 +88,35 @@ try
         transaction.Commit();
         await pending;
     }
+    // Storage statistics and compaction behind the Settings storage section.
+    var big = new byte[300 * 1024];
+    Array.Fill(big, (byte)7);
+    var imageIds = new List<Guid>();
+    for (var i = 0; i < 12; i++)
+    {
+        var image = new ClipboardItem { Type = ClipboardItemType.Image, ImageData = big, ThumbnailData = [1, 2, 3] };
+        imageIds.Add(image.Id);
+        await reopened.AddAsync(image);
+    }
+    var stats = await reopened.GetStorageStatsAsync();
+    Check(stats.ImageCount == 12 && stats.ImageBytes == 12L * big.Length && stats.ThumbnailBytes == 36,
+        "Storage statistics count images and sum blob sizes in SQL");
+    Check(stats.ItemCount == (await reopened.GetItemsAsync()).Count, "Storage statistics count every row");
+    Check(stats.FileBytes > stats.ImageBytes, "File size includes stored blobs");
+    foreach (var id in imageIds.Skip(2)) { await reopened.DeleteAsync(id); }
+    var afterDelete = await reopened.GetStorageStatsAsync();
+    Check(afterDelete.ImageCount == 2 && afterDelete.ReclaimableBytes > 0, "Deleted rows leave reclaimable pages");
+    Check(await reopened.CompactIfWorthwhileAsync() == 0 && (await reopened.GetStorageStatsAsync()).ReclaimableBytes > 0,
+        "Automatic compaction skips small amounts of free space");
+    var freed = await reopened.CompactAsync();
+    Check(freed > 0, "Compaction shrinks the database files");
+    var compacted = await reopened.GetStorageStatsAsync();
+    Check(compacted.ReclaimableBytes == 0 && compacted.FileBytes < afterDelete.FileBytes, "Compaction reclaims free pages");
+    Check((await reopened.GetFullItemAsync(imageIds[0]))!.ImageData!.SequenceEqual(big), "Data survives compaction");
+    await reopened.AddAsync(new ClipboardItem { Text = "after compaction" });
+    Check((await reopened.GetItemsAsync()).Count == stats.ItemCount - 10 + 1, "Database keeps working after compaction");
+    Check(await reopened.CompactIfWorthwhileAsync(force: true) >= 0, "Forced compaction runs after migrations");
+
     Console.WriteLine($"PASS: {checks} Windows core regression checks");
 }
 finally
