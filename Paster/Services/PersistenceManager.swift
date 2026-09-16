@@ -33,6 +33,7 @@ final class PersistenceManager {
         }
         if storageError == nil {
             migrateLegacyImages()
+            regenerateOversizedThumbnails()
         }
     }
 
@@ -74,6 +75,44 @@ final class PersistenceManager {
         }
         removeOrphanImages(in: context)
         return moved
+    }
+
+    /// 用原图重新生成旧版本留下的过大缩略图（早期按 Retina 点数生成的两倍 PNG 可达数百 KB，
+    /// 列表每次刷新都要整体加载）。只有图片类型记录会被拉取；原图按需读取、逐条释放。
+    /// 无法重生成的记录（原图缺失或损坏）保持原样，下次启动会再次尝试，代价只是一次查询。
+    ///
+    /// 返回重生成的数量。
+    @discardableResult
+    func regenerateOversizedThumbnails(limitBytes: Int = ImageUtils.oversizedThumbnailBytes) -> Int {
+        let context = mainContext
+        let imageType = ClipboardItemType.image.rawValue
+        var page = FetchDescriptor<ClipboardItem>(predicate: #Predicate { $0.typeRaw == imageType },
+                                                  sortBy: [SortDescriptor(\.createdAt)])
+        page.fetchLimit = 8
+        var regenerated = 0
+        // 分页处理并逐批落盘：一批处理完释放引用，触发过的原图关系随之释放，
+        // 峰值内存只有一批原图，而不是全部。
+        while let batch = try? context.fetch(page), !batch.isEmpty {
+            page.fetchOffset = (page.fetchOffset ?? 0) + batch.count
+            for item in batch {
+                guard let thumbnail = item.thumbnailData, thumbnail.count > limitBytes,
+                      let original = item.imageData,
+                      let replacement = ImageUtils.thumbnail(from: original),
+                      replacement.count < thumbnail.count else { continue }
+                item.thumbnailData = replacement
+                regenerated += 1
+            }
+            guard context.hasChanges else { continue }
+            do { try context.save() } catch {
+                NSLog("[Paster] 保存重生成的缩略图失败: \(error.localizedDescription)")
+                context.rollback()
+                break
+            }
+        }
+        if regenerated > 0 {
+            NSLog("[Paster] 已重新生成 \(regenerated) 张过大的缩略图")
+        }
+        return regenerated
     }
 
     /// 删除没有所属记录的图片行（例如批量清空历史时未级联到的图片）。

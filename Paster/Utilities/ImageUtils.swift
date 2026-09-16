@@ -8,17 +8,33 @@ import UniformTypeIdentifiers
 /// 第 4 轮：新增「存储压缩」——超过最大边长的大图会被等比缩小后再持久化，
 /// 降低数据库体积与内存占用。
 enum ImageUtils {
+    /// 列表缩略图的最大边长（像素）。
+    static let thumbnailMaxDimension = 240
+    /// 缩略图 JPEG 质量。240 像素的 JPEG 通常只有几十 KB，而同尺寸 PNG 可达数百 KB；
+    /// 缩略图只用于列表扫读，透明区域丢失可以接受。
+    static let thumbnailJPEGQuality: CGFloat = 0.8
+    /// 超过此大小的缩略图视为旧版本生成的过大缩略图，启动时重新生成。
+    /// 240 像素 JPEG 远小于此值，重生成后不会再次命中。
+    static let oversizedThumbnailBytes = 100_000
+
     /// ImageIO uses pixel dimensions and has no AppKit/window-server dependency.
     /// Both full storage and preview images are downsampled before decoding.
     static func processForStorage(_ data: Data) -> (image: Data, thumbnail: Data)? {
         guard let source = CGImageSourceCreateWithData(data as CFData,
             [kCGImageSourceShouldCache: false] as CFDictionary),
               let image = downsample(source, maxDimension: 1600),
-              let thumbnail = downsample(source, maxDimension: 240) else { return nil }
+              let thumbnail = downsample(source, maxDimension: thumbnailMaxDimension, format: .jpeg) else { return nil }
         return (image, thumbnail)
     }
 
-    private static func downsample(_ source: CGImageSource, maxDimension: Int) -> Data? {
+    /// 仅从已存储的原图重新生成缩略图（用于替换旧版本生成的过大缩略图）。
+    static func thumbnail(from imageData: Data) -> Data? {
+        guard let source = CGImageSourceCreateWithData(imageData as CFData,
+            [kCGImageSourceShouldCache: false] as CFDictionary) else { return nil }
+        return downsample(source, maxDimension: thumbnailMaxDimension, format: .jpeg)
+    }
+
+    private static func downsample(_ source: CGImageSource, maxDimension: Int, format: UTType = .png) -> Data? {
         let options: [CFString: Any] = [
             kCGImageSourceCreateThumbnailFromImageAlways: true,
             kCGImageSourceCreateThumbnailWithTransform: true,
@@ -27,8 +43,10 @@ enum ImageUtils {
         ]
         guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return nil }
         let output = NSMutableData()
-        guard let destination = CGImageDestinationCreateWithData(output, UTType.png.identifier as CFString, 1, nil) else { return nil }
-        CGImageDestinationAddImage(destination, image, nil)
+        guard let destination = CGImageDestinationCreateWithData(output, format.identifier as CFString, 1, nil) else { return nil }
+        let properties: [CFString: Any]? = format == .jpeg
+            ? [kCGImageDestinationLossyCompressionQuality: thumbnailJPEGQuality] : nil
+        CGImageDestinationAddImage(destination, image, properties as CFDictionary?)
         guard CGImageDestinationFinalize(destination) else { return nil }
         return output as Data
     }

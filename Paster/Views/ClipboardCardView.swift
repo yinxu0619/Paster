@@ -107,8 +107,8 @@ struct ClipboardCardView: View {
 
     @ViewBuilder
     private var imagePreview: some View {
-        if let data = item.thumbnailData ?? item.imageData,
-           let nsImage = NSImage(data: data) {
+        // 解码结果按记录缓存，重绘不再重复解码；缺缩略图的旧记录才回退到原图。
+        if let nsImage = ThumbnailCache.shared.image(for: item.id, data: item.thumbnailData ?? item.imageData) {
             Image(nsImage: nsImage)
                 .resizable()
                 .interpolation(.high)

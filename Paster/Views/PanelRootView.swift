@@ -189,10 +189,12 @@ struct PanelRootView: View {
     var layout: PanelLayout = .vertical
 
     var body: some View {
-        Group {
+        // 一次 body 只解析一遍可见项，子视图全部复用，避免各处反复重建全量字典。
+        let visible = resolveVisible()
+        return Group {
             switch layout {
-            case .vertical: verticalBody
-            case .bar:      barBody
+            case .vertical: verticalBody(visible)
+            case .bar:      barBody(visible)
             }
         }
         .background(.ultraThinMaterial)
@@ -214,7 +216,7 @@ struct PanelRootView: View {
         // 不在 onDisappear 里停监听：面板内容会被复用，隐藏/再呼出时 onAppear 未必重新触发，
         // 停了就再也起不来（滚轮失效）。监听器已按 `event.window is FloatingPanel` 过滤，
         // 常驻不会影响其它窗口；视图真正销毁时由各自 deinit 统一清理。
-        .onChange(of: orderedVisible.map(\.persistentModelID)) { _, _ in
+        .onChange(of: visible.ordered.map(\.persistentModelID)) { _, _ in
             selectDefaultIfNeeded()
             syncWheel()
         }
@@ -231,16 +233,16 @@ struct PanelRootView: View {
 
     // MARK: - 竖向布局（默认）
 
-    private var verticalBody: some View {
+    private func verticalBody(_ visible: VisibleItems) -> some View {
         VStack(spacing: 0) {
-            header
+            header(visible)
             SearchBarView(searchText: $searchText,
                           selectedApp: $selectedApp,
                           appNames: appNames,
                           focus: $searchFocused,
                           onKey: handleKeyPress)
             Divider()
-            content
+            content(visible)
         }
         // 填满承载窗口：光标/居中为 360×480，左右侧栏为满屏高度（由 AppDelegate 设定窗口尺寸）。
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -248,22 +250,22 @@ struct PanelRootView: View {
 
     // MARK: - 横向平铺底栏布局
 
-    private var barBody: some View {
+    private func barBody(_ visible: VisibleItems) -> some View {
         VStack(spacing: 0) {
-            barHeader
+            barHeader(visible)
             Divider()
-            barContent
+            barContent(visible)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private var barHeader: some View {
+    private func barHeader(_ visible: VisibleItems) -> some View {
         HStack(spacing: 10) {
             Image(systemName: "doc.on.clipboard")
                 .foregroundStyle(.secondary)
             Text("Paster")
                 .font(.headline)
-            Text(L10n.tr("panel.itemCount", Int64(orderedVisible.count)))
+            Text(L10n.tr("panel.itemCount", Int64(visible.ordered.count)))
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Spacer(minLength: 12)
@@ -286,20 +288,20 @@ struct PanelRootView: View {
     }
 
     @ViewBuilder
-    private var barContent: some View {
-        if orderedVisible.isEmpty {
+    private func barContent(_ visible: VisibleItems) -> some View {
+        if visible.ordered.isEmpty {
             emptyState
         } else {
-            barList
+            barList(visible)
         }
     }
 
-    private var barList: some View {
+    private func barList(_ visible: VisibleItems) -> some View {
         ScrollViewReader { proxy in
             ScrollView(.horizontal, showsIndicators: false) {
                 // LazyHStack 仅渲染可见瓦片，支持大量历史横向流畅滚动。
                 LazyHStack(spacing: 10) {
-                    ForEach(orderedVisible) { tile(for: $0) }
+                    ForEach(visible.ordered) { tile(for: $0) }
                 }
                 .padding(.horizontal, 14)
                 .padding(.vertical, 12)
@@ -327,14 +329,14 @@ struct PanelRootView: View {
 
     // MARK: - 头部
 
-    private var header: some View {
+    private func header(_ visible: VisibleItems) -> some View {
         HStack {
             Image(systemName: "doc.on.clipboard")
                 .foregroundStyle(.secondary)
             Text("Paster")
                 .font(.headline)
             Spacer()
-            Text(L10n.tr("panel.itemCount", Int64(orderedVisible.count)))
+            Text(L10n.tr("panel.itemCount", Int64(visible.ordered.count)))
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -346,11 +348,11 @@ struct PanelRootView: View {
     // MARK: - 内容
 
     @ViewBuilder
-    private var content: some View {
-        if orderedVisible.isEmpty {
+    private func content(_ visible: VisibleItems) -> some View {
+        if visible.ordered.isEmpty {
             emptyState
         } else {
-            list
+            list(visible)
         }
     }
 
@@ -372,20 +374,20 @@ struct PanelRootView: View {
         .padding()
     }
 
-    private var list: some View {
+    private func list(_ visible: VisibleItems) -> some View {
         ScrollViewReader { proxy in
             ScrollView {
                 // LazyVStack 仅渲染可见卡片，支持百条以上历史流畅滚动。
                 LazyVStack(alignment: .leading, spacing: 8) {
-                    if !pinnedItems.isEmpty {
+                    if !visible.pinned.isEmpty {
                         sectionHeader(L10n.tr("panel.pinned"), systemImage: "pin.fill")
-                        ForEach(pinnedItems) { card(for: $0) }
+                        ForEach(visible.pinned) { card(for: $0) }
                     }
-                    if !unpinnedItems.isEmpty {
-                        if !pinnedItems.isEmpty {
+                    if !visible.unpinned.isEmpty {
+                        if !visible.pinned.isEmpty {
                             sectionHeader(L10n.tr("panel.history"), systemImage: "clock")
                         }
-                        ForEach(unpinnedItems) { card(for: $0) }
+                        ForEach(visible.unpinned) { card(for: $0) }
                     }
                 }
                 .padding(10)
@@ -459,16 +461,24 @@ struct PanelRootView: View {
         appNames = Array(Set(items.compactMap(\.sourceAppName))).sorted()
     }
 
-    // Cache identities rather than models: after a deletion @Query can update before
-    // onChange rebuilds the cache. Resolve only live rows so a card never reads a deleted model.
-    private func resolve(_ ids: [PersistentIdentifier]) -> [ClipboardItem] {
-        let live = Dictionary(uniqueKeysWithValues: items.map { ($0.persistentModelID, $0) })
-        return ids.compactMap { live[$0] }
+    /// 一次解析得到的可见项分组；`body` 里解析一次后传给各子视图。
+    private struct VisibleItems {
+        var pinned: [ClipboardItem]
+        var unpinned: [ClipboardItem]
+        var ordered: [ClipboardItem]
     }
 
-    private var pinnedItems: [ClipboardItem] { resolve(pinnedIDs) }
-    private var unpinnedItems: [ClipboardItem] { resolve(unpinnedIDs) }
-    private var orderedVisible: [ClipboardItem] { resolve(pinnedIDs + unpinnedIDs) }
+    // Cache identities rather than models: after a deletion @Query can update before
+    // onChange rebuilds the cache. Resolve only live rows so a card never reads a deleted model.
+    private func resolveVisible() -> VisibleItems {
+        let live = Dictionary(uniqueKeysWithValues: items.map { ($0.persistentModelID, $0) })
+        let pinned = pinnedIDs.compactMap { live[$0] }
+        let unpinned = unpinnedIDs.compactMap { live[$0] }
+        return VisibleItems(pinned: pinned, unpinned: unpinned, ordered: pinned + unpinned)
+    }
+
+    /// 事件处理（键盘 / 滚轮 / 删除）里按需解析一次；渲染路径不要用它，用 `body` 里的 `visible`。
+    private var orderedVisible: [ClipboardItem] { resolveVisible().ordered }
 
     private var selectedItem: ClipboardItem? {
         guard let selectedID else { return nil }

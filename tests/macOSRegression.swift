@@ -1,5 +1,6 @@
 import AppKit
 import SwiftData
+import UniformTypeIdentifiers
 import ImageIO
 
 @main
@@ -95,6 +96,10 @@ struct MacOSRegression {
             let image = CGImageSourceCreateImageAtIndex(source, 0, nil)!
             check(image.width <= bound && image.height >= 1, "Downsample pixel size and keep narrow images valid")
         }
+        let thumbnailType = CGImageSourceGetType(CGImageSourceCreateWithData(processed.thumbnail as CFData, nil)!)! as String
+        check(thumbnailType == UTType.jpeg.identifier, "Thumbnails are stored as JPEG")
+        let imageType = CGImageSourceGetType(CGImageSourceCreateWithData(processed.image as CFData, nil)!)! as String
+        check(imageType == UTType.png.identifier, "Full-size images stay lossless PNG")
         check(ImageUtils.processForStorage(Data("not an image".utf8)) == nil, "Malformed images fail safely")
 
         check(ClipboardSelection.afterDeleting(2, from: [1, 2, 3]) == 3, "Middle deletion selects next item")
@@ -189,5 +194,49 @@ struct MacOSRegression {
         try ctx.save()
         let afterClear = try imageRows()
         check(afterClear == 0, "Replacing or clearing an image leaves no stray rows")
+        try checkThumbnailRegeneration(root: root)
+    }
+
+    /// Older versions stored Retina-sized PNG thumbnails of several hundred KB; they are
+    /// regenerated from the original on open, and decoded thumbnails are cached per item.
+    static func checkThumbnailRegeneration(root: URL) throws {
+        let schema = PersistenceManager.schema
+        let store = root.appendingPathComponent("thumbnails.store")
+        let original = png(red: 40, width: 1200, height: 900)
+        // Noise-free PNGs compress well, so pad a large legacy thumbnail past the threshold.
+        var legacyThumbnail = png(red: 40, width: 480, height: 360)
+        legacyThumbnail.append(Data(count: ImageUtils.oversizedThumbnailBytes))
+        let manager = PersistenceManager(configuration: ModelConfiguration(schema: schema, url: store))
+        let oversized = ClipboardItem(type: .image, imageData: original, thumbnailData: legacyThumbnail)
+        let modern = ClipboardItem(type: .image, imageData: original, thumbnailData: ImageUtils.thumbnail(from: original)!)
+        let modernThumbnail = modern.thumbnailData
+        let broken = ClipboardItem(type: .image, thumbnailData: legacyThumbnail)
+        for item in [oversized, modern, broken] { manager.mainContext.insert(item) }
+        try manager.mainContext.save()
+
+        let reopened = PersistenceManager(configuration: ModelConfiguration(schema: schema, url: store))
+        let items = try reopened.mainContext.fetch(FetchDescriptor<ClipboardItem>(sortBy: [SortDescriptor(\.createdAt)]))
+        check(items.count == 3, "All image rows survive thumbnail regeneration")
+        let regenerated = items[0].thumbnailData!
+        check(regenerated.count < ImageUtils.oversizedThumbnailBytes, "Oversized legacy thumbnail is replaced on open")
+        let regeneratedSource = CGImageSourceCreateWithData(regenerated as CFData, nil)!
+        let regeneratedImage = CGImageSourceCreateImageAtIndex(regeneratedSource, 0, nil)!
+        check(max(regeneratedImage.width, regeneratedImage.height) <= ImageUtils.thumbnailMaxDimension,
+              "Regenerated thumbnail respects the pixel bound")
+        check(items[0].imageData == original, "Regeneration leaves the original untouched")
+        check(items[1].thumbnailData == modernThumbnail, "Already small thumbnails are left alone")
+        check(items[2].thumbnailData == legacyThumbnail, "Rows without an original keep their thumbnail")
+        check(reopened.regenerateOversizedThumbnails() == 0, "Regeneration is idempotent")
+
+        let cache = ThumbnailCache.shared
+        var decodes = 0
+        func decode() -> Data? { decodes += 1; return regenerated }
+        let first = cache.image(for: items[0].id, data: decode())
+        let second = cache.image(for: items[0].id, data: decode())
+        check(first != nil && first === second && decodes == 1, "Thumbnail decoding is cached per item")
+        check(cache.image(for: UUID(), data: nil) == nil, "Missing data yields no cached image")
+        cache.invalidate(items[0].id)
+        _ = cache.image(for: items[0].id, data: decode())
+        check(decodes == 2, "Invalidation forces a fresh decode")
     }
 }
