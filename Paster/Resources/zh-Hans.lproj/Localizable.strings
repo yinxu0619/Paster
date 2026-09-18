@@ -139,3 +139,13 @@
 "alert.storageMessage" = "原有历史文件已保留。本次使用临时存储，退出 Paster 后新记录将丢失。请退出并备份存储目录，再尝试修复。";
 
 "alert.showStorage" = "显示存储目录";
+
+/* Motion preferences */
+"settings.animations" = "动画";
+"settings.panelAnimation" = "呼出效果";
+"settings.listAnimations" = "列表滚动与选中动画";
+"settings.animationsHint" = "自动遵循系统“减少动态效果”设置。触控板保持连续滚动。";
+"animation.smooth" = "顺滑（默认）";
+"animation.elastic" = "弹性";
+"animation.fade" = "淡入";
+"animation.none" = "关闭";

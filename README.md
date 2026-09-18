@@ -58,14 +58,14 @@ Get the latest pre-built apps from [Releases](https://github.com/yinxu0619/Paste
 
 - **Persistent clipboard history**: Monitors the system clipboard in the background and records plain text, rich text, images, file paths, and URLs. Each entry includes type label, timestamp, and source app name + icon. Data stays 100% local (SwiftData) — no network, no uploads.
 - **Global hotkey**: Default `⌘⇧V` to open the panel from any app; **customizable in Settings**; auto-hides on focus loss; close with `Esc` or the hotkey again.
-- **Configurable panel position**: Follow cursor (floating), bottom / top / left / right / center of screen, each with slide-in animation from the corresponding edge.
-  - **Bottom / Top**: Full-width horizontal bar rising from the screen edge; bar height adjustable via **Settings slider (with preview)** or **drag the top edge** after opening; cards scale with height; **mouse wheel / trackpad** navigates selection horizontally.
+- **Configurable panel position**: Follow cursor (floating), bottom / top / left / right / center of screen, with Smooth (default), Elastic, Fade, or Off entrance effects.
+  - **Bottom / Top**: Full-width horizontal bar rising from the screen edge; bar height adjustable via **Settings slider (with preview)** or **drag the top edge** after opening; cards scale with height; **mouse wheel** steps through selection; **trackpad** scrolls continuously. Arrow-key navigation only scrolls when a card leaves the visible area.
   - **Left / Right**: Full-height vertical sidebar.
 - **Multiple paste modes**: Paste with formatting, paste as plain text, copy again; context menu and keyboard shortcuts; **plain-text paste shortcut configurable in Settings** (default `⌘⇧↩`).
 - **Search & organization**: Real-time keyword search and source app filter; pinned items in a separate Pinboard group at the top.
 - **Full keyboard control**: `↑↓` (horizontal bar: `←→`) to select, `Home`/`End` for first/last, Return to paste, `⌘⇧↩` for plain text, `⌘⌫` to delete, `⌘P` to pin, `⌘Y` for full preview, `Esc` to close; search field auto-focused on open.
 - **Privacy & settings**: Excluded apps list (sensitive apps not recorded), history limit, clear all, launch at login, menu bar icon.
-- **Polish**: Card layout, image thumbnails, hover/selection effects, slide-in animations, dark/light mode and multi-display support.
+- **Polish**: Card layout, image thumbnails, subtle hover/selection feedback, dark/light mode and multi-display support. Settings include entrance effects and a list animation toggle; system Reduce Motion is respected.
 - **About page**: App info and donation QR codes (WeChat / Alipay / PayPal).
 - **Localization**: Simplified Chinese / English — switch in Settings or follow system language.
 
@@ -161,7 +161,7 @@ touch build/Paster.app && killall Finder Dock
 | --- | --- |
 | Open / hide panel | `⌘⇧V` (customizable) |
 | Close panel | `Esc` |
-| Select | `↑` / `↓` (horizontal bar: `←` / `→`, or mouse wheel / trackpad) |
+| Select | `↑` / `↓` (horizontal bar: `←` / `→`, or mouse wheel; trackpad scrolls) |
 | First / last item | `Home` / `End` |
 | Paste (keep formatting) | `Return` |
 | Paste plain text | `⌘⇧↩` (configurable in Settings) |

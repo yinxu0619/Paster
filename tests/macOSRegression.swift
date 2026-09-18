@@ -2,6 +2,7 @@ import AppKit
 import SwiftData
 import UniformTypeIdentifiers
 import ImageIO
+import QuartzCore
 
 @main
 @MainActor
@@ -68,8 +69,44 @@ struct MacOSRegression {
         check(creations == 4, "Missing content must be recreated even when layout is unchanged")
     }
 
+    static func checkPanelMotion() {
+        let panel = FloatingPanel(contentRect: NSRect(x: 0, y: 0, width: 600, height: 300))
+        defer { panel.close() }
+        panel.contentView = NSView(frame: NSRect(x: 0, y: 0, width: 600, height: 300))
+        for position in PanelPosition.allCases {
+            for effect in PanelAnimation.allCases {
+                for reduceMotion in [false, true] {
+                    panel.prepareEntrance(effect, position: position, reduceMotion: reduceMotion)
+                    let layer = panel.contentView!.layer!
+                    let slide = layer.animation(forKey: "paster.slideIn") as? CABasicAnimation
+                    let fade = layer.animation(forKey: "paster.fadeIn")
+                    check(panel.hasShadow, "Entrance must not switch the shadow off")
+                    if effect == .none {
+                        check(slide == nil && fade == nil, "Off cancels a previous entrance immediately")
+                    } else if reduceMotion || effect == .fade {
+                        check(slide == nil && fade != nil, "Reduce Motion permits opacity only")
+                    } else {
+                        check(slide != nil && fade != nil, "Motion effects include a short slide")
+                        check(abs((slide!.fromValue as! NSNumber).doubleValue) <= 28,
+                              "Large panels must not travel their full width or height")
+                    }
+                    check(layer.opacity == 1 && CATransform3DIsIdentity(layer.transform),
+                          "Model layer stays at its final state when entrance is interrupted")
+                }
+            }
+        }
+        panel.prepareEntrance(.elastic, position: .bottom, reduceMotion: false)
+        panel.cancelEntrance()
+        check(panel.contentView!.layer!.animationKeys()?.isEmpty != false,
+              "Dismissing mid-animation must remove all entrance effects")
+        panel.prepareEntrance(.smooth, position: .right, reduceMotion: false)
+        check(panel.contentView!.layer!.animation(forKey: "paster.slideIn") != nil && panel.hasShadow,
+              "Immediate reopening starts a fresh animation with its shadow intact")
+    }
+
     static func main() throws {
         checkPanelContentReuse()
+        checkPanelMotion()
         var seen: [Int: Data] = [:]
         var collision: (Data, Data)?
         for value in 0...255 {

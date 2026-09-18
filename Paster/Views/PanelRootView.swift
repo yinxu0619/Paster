@@ -6,9 +6,6 @@ import AppKit
 @MainActor
 final class WheelSelector: ObservableObject {
     private var monitor: Any?
-    /// 触控板精确滚动的累加器与阈值（避免一滑就跳很多项）。
-    private var accumulated: CGFloat = 0
-    private let preciseThreshold: CGFloat = 10
     /// 鼠标滚轮离散步进的时间节流：一个物理刻度常连发多个事件，
     /// 用最小间隔把「一圈」限制为一格，避免滚一下就窜过好几项。
     private var lastMouseStepAt: TimeInterval = 0
@@ -25,31 +22,19 @@ final class WheelSelector: ObservableObject {
             // 只处理悬浮面板上的滚轮，避免误吞设置等其它窗口的滚动事件。
             guard event.window is FloatingPanel else { return event }
 
-            // 取主轴位移：鼠标滚轮多为垂直，触控板可垂直或水平，统一映射为左右切换。
+            // Preserve native trackpad scrolling, including momentum and end events.
+            guard !event.hasPreciseScrollingDeltas else { return event }
+
+            // 离散鼠标滚轮仍按格切换，触控板不改变选中项。
             let dy = event.scrollingDeltaY != 0 ? event.scrollingDeltaY : event.deltaY
             let dx = event.scrollingDeltaX != 0 ? event.scrollingDeltaX : event.deltaX
             let delta = abs(dx) > abs(dy) ? dx : dy
             guard delta != 0 else { return event }
 
-            if event.hasPreciseScrollingDeltas {
-                // 触控板：累加到阈值即走格，滑得越快一次跨越的格数越多；滑动结束时清零。
-                accumulated += delta
-                let steps = Int(accumulated / preciseThreshold)
-                if steps != 0 {
-                    let direction = steps < 0 ? 1 : -1
-                    for _ in 0..<abs(steps) { self.step(direction) }
-                    accumulated -= CGFloat(steps) * preciseThreshold
-                }
-                if event.phase == .ended || event.momentumPhase == .ended {
-                    accumulated = 0
-                }
-            } else {
-                // 鼠标滚轮：一个刻度常连发多个事件，用时间节流保证一次只走一格。
-                let now = ProcessInfo.processInfo.systemUptime
-                if now - lastMouseStepAt >= mouseStepInterval {
-                    lastMouseStepAt = now
-                    self.step(delta < 0 ? 1 : -1)
-                }
+            let now = ProcessInfo.processInfo.systemUptime
+            if now - lastMouseStepAt >= mouseStepInterval {
+                lastMouseStepAt = now
+                self.step(delta < 0 ? 1 : -1)
             }
             return nil
         }
@@ -68,9 +53,11 @@ final class WheelSelector: ObservableObject {
         guard !ids.isEmpty else { return }
         if let current, let index = ids.firstIndex(of: current) {
             let next = max(0, min(ids.count - 1, index + direction))
-            onSelect?(ids[next])
+            self.current = ids[next]
+            onSelect?(self.current)
         } else {
-            onSelect?(direction >= 0 ? ids.first : ids.last)
+            current = direction >= 0 ? ids.first : ids.last
+            onSelect?(current)
         }
     }
 }
@@ -159,7 +146,14 @@ struct PanelRootView: View {
     @State private var selectedID: PersistentIdentifier?
     /// 需要滚动到可见位置的目标项。仅在键盘 / 滚轮导航时设置，鼠标点选不触发，
     /// 避免点右侧卡片时视图自动把它滚到居中。
-    @State private var scrollTargetID: PersistentIdentifier?
+    private struct ScrollRequest: Equatable {
+        let id: PersistentIdentifier
+        let animated: Bool
+        // Repeat navigation after manually scrolling away must still reveal the item.
+        let token = UUID()
+    }
+    @State private var scrollRequest: ScrollRequest?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// 搜索关键词。
     @State private var searchText: String = ""
     @State private var filterKeyword = ""
@@ -306,11 +300,9 @@ struct PanelRootView: View {
                 .padding(.horizontal, 14)
                 .padding(.vertical, 12)
             }
-            .onChange(of: scrollTargetID) { _, id in
-                guard let id else { return }
-                withAnimation(.easeInOut(duration: 0.12)) {
-                    proxy.scrollTo(id, anchor: .center)
-                }
+            .onChange(of: scrollRequest) { _, request in
+                guard let request else { return }
+                reveal(request, using: proxy)
             }
         }
     }
@@ -392,11 +384,9 @@ struct PanelRootView: View {
                 }
                 .padding(10)
             }
-            .onChange(of: scrollTargetID) { _, id in
-                guard let id else { return }
-                withAnimation(.easeInOut(duration: 0.12)) {
-                    proxy.scrollTo(id, anchor: .center)
-                }
+            .onChange(of: scrollRequest) { _, request in
+                guard let request else { return }
+                reveal(request, using: proxy)
             }
         }
     }
@@ -577,10 +567,21 @@ struct PanelRootView: View {
         }
     }
 
-    /// 选中并滚动到目标项（用于键盘 / 滚轮导航；鼠标点选不走这里，故不会自动居中）。
-    private func selectAndScroll(_ id: PersistentIdentifier?) {
+    /// Reveal only the obscured edge; visible cards keep their position.
+    private func reveal(_ request: ScrollRequest, using proxy: ScrollViewProxy) {
+        let animated = request.animated && settings.listAnimations && !reduceMotion
+        var transaction = Transaction(animation: animated ? .easeOut(duration: 0.18) : nil)
+        transaction.disablesAnimations = !animated
+        withTransaction(transaction) {
+            // With no anchor, SwiftUI moves only enough to make the card wholly visible.
+            proxy.scrollTo(request.id)
+        }
+    }
+
+    private func selectAndScroll(_ id: PersistentIdentifier?, animated: Bool = true) {
         selectedID = id
-        scrollTargetID = id
+        wheel.current = id
+        scrollRequest = id.map { ScrollRequest(id: $0, animated: animated) }
     }
 
     private func deleteAndAdvance(_ item: ClipboardItem) {
@@ -609,8 +610,7 @@ struct PanelRootView: View {
         searchText = ""
         filterKeyword = ""
         rebuildVisibleItems()
-        // 先清空滚动目标，确保随后设定选中项时必定触发一次滚动到位。
-        scrollTargetID = nil
+        scrollRequest = nil
         if layout == .bar { wheel.start() }
         keyboard.start()
         // 下一轮 runloop 读取最新列表：保留上次的选中项（呼出之间不重置），
@@ -619,7 +619,8 @@ struct PanelRootView: View {
             let keepsSelection = selectedID != nil
                 && orderedVisible.contains { $0.persistentModelID == selectedID }
             let target = keepsSelection ? selectedID : orderedVisible.first?.persistentModelID
-            selectAndScroll(target)
+            // Restore position without a second animation during panel entrance.
+            selectAndScroll(target, animated: false)
             syncWheel()
             keyboard.searchEmpty = searchText.isEmpty
             keyboard.hasSelection = (selectedItem != nil)

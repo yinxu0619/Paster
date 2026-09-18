@@ -116,6 +116,18 @@ struct SettingsView: View {
                 }
             }
 
+            Section(L10n.tr("settings.animations")) {
+                Picker(L10n.tr("settings.panelAnimation"), selection: $settings.panelAnimation) {
+                    ForEach(PanelAnimation.allCases) { animation in
+                        Text(animation.displayName).tag(animation)
+                    }
+                }
+                Toggle(L10n.tr("settings.listAnimations"), isOn: $settings.listAnimations)
+                Text(L10n.tr("settings.animationsHint"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section(L10n.tr("settings.history")) {
                 Stepper(value: $settings.historyLimit, in: 20...2000, step: 20) {
                     HStack {

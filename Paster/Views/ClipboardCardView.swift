@@ -22,6 +22,8 @@ struct PanelActions {
 struct ClipboardCardView: View {
     let item: ClipboardItem
     let isSelected: Bool
+    @ObservedObject private var settings = AppSettings.shared
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// 横向平铺条模式下让卡片纵向填满，并放大图片 / 多展示文本（第 6 轮新增）。
     var fillHeight: Bool = false
@@ -46,16 +48,15 @@ struct ClipboardCardView: View {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .strokeBorder(isSelected ? Color.accentColor.opacity(0.8) : Color.clear, lineWidth: 1.5)
         )
-        .scaleEffect(isSelected ? 1.0 : (isHovering ? 0.995 : 1.0))
         .shadow(color: .black.opacity(isSelected ? 0.12 : 0), radius: 4, y: 1)
         .onHover { hovering in isHovering = hovering }
-        .animation(.easeInOut(duration: 0.15), value: isSelected)
-        .animation(.easeInOut(duration: 0.15), value: isHovering)
+        .animation(settings.listAnimations && !reduceMotion ? .easeOut(duration: 0.1) : nil, value: isSelected)
+        .animation(settings.listAnimations && !reduceMotion ? .easeOut(duration: 0.1) : nil, value: isHovering)
     }
 
     /// 选中 > 悬停 > 默认，三态背景色（语义色自动适配深色/浅色模式）。
     private var backgroundFill: Color {
-        if isSelected { return Color.accentColor.opacity(0.18) }
+        if isSelected { return Color.accentColor.opacity(0.08) }
         if isHovering { return Color.primary.opacity(0.08) }
         return Color.primary.opacity(0.04)
     }

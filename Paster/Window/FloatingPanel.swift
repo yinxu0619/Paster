@@ -1,4 +1,5 @@
 import AppKit
+import QuartzCore
 
 /// 悬浮呼出面板。
 ///
@@ -14,6 +15,60 @@ final class FloatingPanel: NSPanel {
 
     private var contentLayout: PanelLayout?
     private var configuredContentSize: NSSize?
+
+    /// Prepare before ordering the window front so its first frame already has the
+    /// entrance effect. Keep the shadow stable, and never defer input until completion.
+    func prepareEntrance(_ effect: PanelAnimation, position: PanelPosition, reduceMotion: Bool) {
+        cancelEntrance()
+        guard let contentView else { return }
+        contentView.wantsLayer = true
+        guard let layer = contentView.layer else { return }
+        let effect = effect.effective(reduceMotion: reduceMotion)
+        guard effect != .none else { return }
+
+        let fade = CABasicAnimation(keyPath: "opacity")
+        fade.fromValue = 0
+        fade.toValue = 1
+        fade.duration = effect == .fade ? 0.12 : 0.1
+        fade.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        layer.add(fade, forKey: "paster.fadeIn")
+        guard effect != .fade else { return }
+
+        // A short translation settles quickly even on a tall bar or sidebar.
+        // Hosting views can use flipped coordinates; enter from the chosen edge.
+        let down: CGFloat = contentView.isFlipped ? 1 : -1
+        let axis: String
+        let offset: CGFloat
+        switch position {
+        case .bottom: axis = "transform.translation.y"; offset = down * 28
+        case .top: axis = "transform.translation.y"; offset = -down * 28
+        case .left: axis = "transform.translation.x"; offset = -28
+        case .right: axis = "transform.translation.x"; offset = 28
+        case .cursor, .center: axis = "transform.translation.y"; offset = down * 10
+        }
+        let slide: CABasicAnimation
+        if effect == .elastic {
+            let spring = CASpringAnimation(keyPath: axis)
+            spring.mass = 1
+            spring.stiffness = 400
+            spring.damping = 26
+            spring.duration = spring.settlingDuration
+            slide = spring
+        } else {
+            slide = CABasicAnimation(keyPath: axis)
+            slide.duration = 0.22
+            slide.timingFunction = CAMediaTimingFunction(controlPoints: 0.16, 1, 0.3, 1)
+        }
+        slide.fromValue = offset
+        slide.toValue = 0
+        layer.add(slide, forKey: "paster.slideIn")
+    }
+
+    func cancelEntrance() {
+        contentView?.layer?.removeAnimation(forKey: "paster.slideIn")
+        contentView?.layer?.removeAnimation(forKey: "paster.fadeIn")
+        hasShadow = true
+    }
 
     /// 屏幕尺寸只影响窗口几何，不应销毁已预热的 SwiftUI 内容与列表状态。
     func configureContent(layout: PanelLayout, size: NSSize,

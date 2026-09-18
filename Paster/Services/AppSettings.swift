@@ -24,6 +24,8 @@ final class AppSettings: ObservableObject {
         static let hotKeyCode = "hotKeyCode"
         static let hotKeyModifiers = "hotKeyModifiers"
         static let panelPosition = "panelPosition"
+        static let panelAnimation = "panelAnimation"
+        static let listAnimations = "listAnimations"
         static let barHeight = "barHeight"
         static let barAttachToScreenEdge = "barAttachToScreenEdge"
         static let plainPasteShortcut = "plainPasteShortcut"
@@ -74,6 +76,14 @@ final class AppSettings: ObservableObject {
         didSet { defaults.set(panelPosition.rawValue, forKey: Keys.panelPosition) }
     }
 
+    @Published var panelAnimation: PanelAnimation {
+        didSet { defaults.set(panelAnimation.rawValue, forKey: Keys.panelAnimation) }
+    }
+
+    @Published var listAnimations: Bool {
+        didSet { defaults.set(listAnimations, forKey: Keys.listAnimations) }
+    }
+
     /// 横向平铺条（底部/顶部）的高度，单位 pt。
     @Published var barHeight: Double {
         didSet {
@@ -110,6 +120,8 @@ final class AppSettings: ObservableObject {
         hotKeyCode = UInt32(defaults.object(forKey: Keys.hotKeyCode) as? Int ?? Int(Self.defaultHotKeyCode))
         hotKeyModifiers = UInt32(defaults.object(forKey: Keys.hotKeyModifiers) as? Int ?? Int(Self.defaultHotKeyModifiers))
         panelPosition = PanelPosition(rawValue: defaults.string(forKey: Keys.panelPosition) ?? "") ?? .cursor
+        panelAnimation = PanelAnimation(rawValue: defaults.string(forKey: Keys.panelAnimation) ?? "") ?? .smooth
+        listAnimations = defaults.object(forKey: Keys.listAnimations) as? Bool ?? true
         barHeight = defaults.object(forKey: Keys.barHeight) as? Double ?? 240
         barAttachToScreenEdge = defaults.bool(forKey: Keys.barAttachToScreenEdge)
         plainPasteShortcut = PlainPasteShortcut(rawValue: defaults.string(forKey: Keys.plainPasteShortcut) ?? "") ?? .commandShift

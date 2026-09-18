@@ -270,77 +270,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let screen = currentScreen()
         configurePanelContent(panel, screen: screen)
 
-        // 窗口直接定位到最终位置；滑入动画交给 GPU 加速的内容图层完成（比窗口 setFrame 更丝滑）。
+        // 先准备内容和动画，再上屏，避免最终位置的内容先闪现一帧。
         panel.setFrameOrigin(targetOrigin(for: panel, screen: screen))
         panel.alphaValue = 1
+        NotificationCenter.default.post(name: Self.panelWillShowNotification, object: nil)
+        panel.contentView?.layoutSubtreeIfNeeded()
+        panel.prepareEntrance(AppSettings.shared.panelAnimation,
+                              position: AppSettings.shared.panelPosition,
+                              reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
         // 先立即上屏并取得键盘焦点（非激活面板可在不切换前台应用的前提下成为 key window），
         // 再补一次应用激活。顺序很关键：把较慢的 activate 放到上屏之后，避免它阻塞面板出现。
         panel.makeKeyAndOrderFront(nil)
 
-        // 通知内容视图重置状态并聚焦搜索框（内容被复用、onAppear 不再触发时也生效）。
-        NotificationCenter.default.post(name: Self.panelWillShowNotification, object: nil)
-
-        animateEntrance(panel)
         NSApp.activate(ignoringOtherApps: true)
-    }
-
-    /// 用 Core Animation 在内容图层上做「弹性位移 + 淡入」入场动画（GPU 加速，丝滑流畅，带果冻回弹）。
-    private func animateEntrance(_ panel: FloatingPanel) {
-        guard let contentView = panel.contentView else { return }
-        contentView.wantsLayer = true
-        guard let layer = contentView.layer else { return }
-        layer.removeAnimation(forKey: "paster.slideIn")
-        layer.removeAnimation(forKey: "paster.fadeIn")
-
-        let position = AppSettings.shared.panelPosition
-        let slides = position != .cursor && position != .center
-
-        // 淡入（更快）。
-        let fade = CABasicAnimation(keyPath: "opacity")
-        fade.fromValue = 0
-        fade.toValue = 1
-        fade.duration = 0.16
-        fade.timingFunction = CAMediaTimingFunction(name: .easeOut)
-        layer.add(fade, forKey: "paster.fadeIn")
-
-        // 位移起点（图层 y 轴向上：负值=向下/屏幕下方，正值=向上/屏幕上方）：
-        // - 底部：从下方进入（起点在下方，向上滑出）→ 负值
-        // - 顶部：从上方进入（起点在上方，向下滑出）→ 正值
-        // - 左/右：x 轴为标准方向，从对应侧边进入
-        // - 悬浮/居中：轻微回弹的小位移
-        let size = panel.frame.size
-        let axis: String
-        let from: CGFloat
-        switch position {
-        case .bottom: axis = "transform.translation.y"; from = -size.height
-        case .top:    axis = "transform.translation.y"; from =  size.height
-        case .left:   axis = "transform.translation.x"; from = -size.width
-        case .right:  axis = "transform.translation.x"; from =  size.width
-        case .cursor, .center: axis = "transform.translation.y"; from = -16
-        }
-
-        let spring = CASpringAnimation(keyPath: axis)
-        spring.fromValue = from
-        spring.toValue = 0
-        spring.mass = 1
-        spring.stiffness = 320       // 更高刚度 → 动画更快
-        spring.damping = 18          // 偏低阻尼 → 带果冻回弹
-        spring.initialVelocity = 0
-        spring.duration = spring.settlingDuration
-
-        // 大幅贴边滑入期间临时关闭窗口阴影，避免回弹时出现空阴影框；结束后恢复。
-        if slides {
-            panel.hasShadow = false
-            DispatchQueue.main.asyncAfter(deadline: .now() + spring.settlingDuration) { [weak panel] in
-                panel?.hasShadow = true
-            }
-        }
-        layer.add(spring, forKey: "paster.slideIn")
     }
 
     private func hidePanel() {
         // 粘贴 / 失焦路径需要即时隐藏以保证焦点与按键时序，这里直接 orderOut。
         panel?.orderOut(nil)
+        panel?.cancelEntrance()
         panel?.alphaValue = 1
     }
 

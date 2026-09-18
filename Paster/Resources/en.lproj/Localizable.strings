@@ -139,3 +139,13 @@
 "alert.storageMessage" = "Your existing history has been preserved. This session uses temporary storage: new copies will be lost when Paster quits. Quit and back up the storage folder before attempting to repair it.";
 
 "alert.showStorage" = "Show Storage Folder";
+
+/* Motion preferences */
+"settings.animations" = "Animations";
+"settings.panelAnimation" = "Panel Entrance";
+"settings.listAnimations" = "Animate selection and list scrolling";
+"settings.animationsHint" = "Follows the system Reduce Motion setting. Trackpad scrolling stays continuous.";
+"animation.smooth" = "Smooth (Default)";
+"animation.elastic" = "Elastic";
+"animation.fade" = "Fade";
+"animation.none" = "Off";
