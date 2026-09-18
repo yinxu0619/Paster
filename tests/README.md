@@ -8,6 +8,7 @@ bash tests/macos-test.sh
 
 They exercise the production model, image processing, selection rules, privacy filters,
 window level, panel content reuse across display sizes, entrance interruption and Reduce Motion,
+coarse/precise wheel selection, gesture direction and momentum routing,
 SwiftData persistence, and the
 separate image storage (legacy inline images are migrated on open and cascade on delete),
 thumbnail regeneration, the decoded-thumbnail cache, storage statistics and VACUUM
@@ -55,8 +56,9 @@ Manual acceptance checks:
 - macOS navigation: move among visible horizontal cards (the row should stay still),
   pass either edge, then reverse. Test Home/End and repeated navigation after manually
   scrolling away. Reopening restores selection without a second scrolling animation.
-- macOS input: trackpad scrolling and momentum must move continuously without changing
-  selection; a discrete mouse wheel still steps through items. Repeat with animations off.
+- macOS input: horizontal trackpad scrolling and momentum must move continuously without
+  changing selection. Vertical coarse and smooth mouse wheels must select items; a fast
+  smooth-wheel burst can advance multiple items. Repeat with animations off.
 
 - macOS: alternate hotkey invocation between displays with different resolutions and
   scaling (including Retina/non-Retina), in bar, sidebar and cursor modes. The panel

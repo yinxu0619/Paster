@@ -2,40 +2,90 @@ import SwiftUI
 import SwiftData
 import AppKit
 
-/// 横向平铺条下用鼠标滚轮左右选择条目（触控板的精确滚动仍交给 ScrollView 自然滚动）。
+/// Interpret direction rather than treating pixel precision as a device identifier:
+/// smooth mouse wheels also produce precise deltas.
+struct WheelNavigation {
+    private var accumulated: CGFloat = 0
+    private var lastInputAt: TimeInterval?
+    private var lastMouseStepAt: TimeInterval?
+    private var horizontalGesture: Bool?
+
+    mutating func reset() { self = Self() }
+
+    /// nil passes the event to native scrolling; zero consumes a fractional step.
+    mutating func steps(dx: CGFloat, dy: CGFloat, precise: Bool,
+                        phase: NSEvent.Phase, momentum: NSEvent.Phase,
+                        timestamp: TimeInterval) -> Int? {
+        if phase.contains(.began) || lastInputAt.map({ timestamp - $0 > 0.25 }) == true {
+            accumulated = 0
+            horizontalGesture = nil
+        }
+        lastInputAt = timestamp
+        let ended = phase.contains(.ended) || phase.contains(.cancelled)
+            || momentum.contains(.ended)
+        defer {
+            if ended {
+                accumulated = 0
+                // Retain the axis between finger lift and the following momentum stream.
+                if phase.contains(.cancelled) || momentum.contains(.ended) {
+                    horizontalGesture = nil
+                }
+            }
+        }
+
+        if precise {
+            let hasPhase = !phase.isEmpty || !momentum.isEmpty
+            if hasPhase && horizontalGesture == nil && (dx != 0 || dy != 0) {
+                horizontalGesture = abs(dx) > abs(dy)
+            }
+            let horizontal = hasPhase ? (horizontalGesture ?? true) : abs(dx) > abs(dy)
+            if horizontal {
+                accumulated = 0
+                return nil
+            }
+            // Reversing the wheel should respond without cancelling leftover travel first.
+            if accumulated * dy < 0 { accumulated = 0 }
+            accumulated += dy
+            let steps = Int(accumulated / 10)
+            accumulated -= CGFloat(steps) * 10
+            return -steps
+        }
+
+        accumulated = 0
+        horizontalGesture = nil
+        let delta = abs(dx) > abs(dy) ? dx : dy
+        guard delta != 0 else { return nil }
+        // Preserve one step per physical notch for coarse wheels with duplicate events.
+        if let lastMouseStepAt, timestamp - lastMouseStepAt < 0.11 { return 0 }
+        lastMouseStepAt = timestamp
+        return delta < 0 ? 1 : -1
+    }
+}
+
+/// Vertical wheel movement selects cards; horizontal trackpad movement scrolls naturally.
 @MainActor
 final class WheelSelector: ObservableObject {
     private var monitor: Any?
-    /// 鼠标滚轮离散步进的时间节流：一个物理刻度常连发多个事件，
-    /// 用最小间隔把「一圈」限制为一格，避免滚一下就窜过好几项。
-    private var lastMouseStepAt: TimeInterval = 0
-    private let mouseStepInterval: TimeInterval = 0.11
+    private var navigation = WheelNavigation()
 
     var ids: [PersistentIdentifier] = []
     var current: PersistentIdentifier?
     var onSelect: ((PersistentIdentifier?) -> Void)?
 
     func start() {
+        navigation.reset()
         guard monitor == nil else { return }
         monitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
             guard let self else { return event }
             // 只处理悬浮面板上的滚轮，避免误吞设置等其它窗口的滚动事件。
             guard event.window is FloatingPanel else { return event }
 
-            // Preserve native trackpad scrolling, including momentum and end events.
-            guard !event.hasPreciseScrollingDeltas else { return event }
-
-            // 离散鼠标滚轮仍按格切换，触控板不改变选中项。
             let dy = event.scrollingDeltaY != 0 ? event.scrollingDeltaY : event.deltaY
             let dx = event.scrollingDeltaX != 0 ? event.scrollingDeltaX : event.deltaX
-            let delta = abs(dx) > abs(dy) ? dx : dy
-            guard delta != 0 else { return event }
-
-            let now = ProcessInfo.processInfo.systemUptime
-            if now - lastMouseStepAt >= mouseStepInterval {
-                lastMouseStepAt = now
-                self.step(delta < 0 ? 1 : -1)
-            }
+            guard let steps = self.navigation.steps(dx: dx, dy: dy,
+                precise: event.hasPreciseScrollingDeltas, phase: event.phase,
+                momentum: event.momentumPhase, timestamp: event.timestamp) else { return event }
+            if steps != 0 { self.step(steps) }
             return nil
         }
     }
@@ -43,6 +93,7 @@ final class WheelSelector: ObservableObject {
     func stop() {
         if let monitor { NSEvent.removeMonitor(monitor) }
         monitor = nil
+        navigation.reset()
     }
 
     deinit {

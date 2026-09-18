@@ -104,9 +104,42 @@ struct MacOSRegression {
               "Immediate reopening starts a fresh animation with its shadow intact")
     }
 
+    static func checkWheelNavigation() {
+        var wheel = WheelNavigation()
+        func scroll(_ dy: CGFloat, x: CGFloat = 0, precise: Bool = true,
+                    phase: NSEvent.Phase = [], momentum: NSEvent.Phase = [],
+                    at time: TimeInterval) -> Int? {
+            wheel.steps(dx: x, dy: dy, precise: precise, phase: phase,
+                        momentum: momentum, timestamp: time)
+        }
+        check(scroll(-3, at: 1) == 0, "Precise mouse wheel starts accumulating rather than passing through")
+        check(scroll(-7, at: 1.01) == 1, "Small smooth-wheel events accumulate into a selection")
+        check(scroll(-35, at: 1.02) == 3, "Fast precise wheel movement advances multiple candidates")
+        check(scroll(10, at: 1.03) == -1, "Reversal responds without waiting for old residual movement")
+        check(scroll(-9, at: 2) == 0, "A new burst starts with an empty accumulator")
+        check(scroll(-1, at: 3) == 0, "Residual movement does not leak between separated bursts")
+        wheel.reset()
+        check(scroll(-9, at: 4) == 0, "Reopening discards old residual movement")
+        check(scroll(0, phase: .ended, at: 4.01) == nil, "Zero-delta end events without a known axis pass through")
+        check(scroll(-1, phase: .began, at: 4.02) == 0, "A new gesture does not inherit old fractional travel")
+        wheel.reset()
+        check(scroll(-2, x: -12, phase: .began, at: 5) == nil, "Horizontal gestures stay native")
+        check(scroll(-15, x: -1, phase: .changed, at: 5.01) == nil, "Diagonal jitter does not change the gesture axis")
+        check(scroll(0, phase: .ended, at: 5.02) == nil, "Finger-lift event reaches native scrolling")
+        check(scroll(-1, x: -10, momentum: .began, at: 5.03) == nil, "Horizontal momentum stays native")
+        check(scroll(0, momentum: .ended, at: 5.04) == nil, "Momentum-end event reaches native scrolling")
+        check(scroll(-20, phase: .began, at: 5.05) == 2, "Vertical precise gestures select even when a driver supplies phases")
+        check(scroll(0, phase: .cancelled, at: 5.06) == 0, "Cancelled selection gestures clear state")
+        check(scroll(0, x: -20, at: 6) == nil, "Unphased horizontal precise events stay native")
+        check(scroll(-1, precise: false, at: 7) == 1, "Ordinary mouse wheels still select")
+        check(scroll(-1, precise: false, at: 7.01) == 0, "Duplicate coarse events do not overstep")
+        check(scroll(-1, precise: false, at: 7.12) == 1, "The next coarse notch selects again")
+    }
+
     static func main() throws {
         checkPanelContentReuse()
         checkPanelMotion()
+        checkWheelNavigation()
         var seen: [Int: Data] = [:]
         var collision: (Data, Data)?
         for value in 0...255 {
