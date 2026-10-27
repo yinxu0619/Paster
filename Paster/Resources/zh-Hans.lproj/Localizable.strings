@@ -159,5 +159,6 @@
 "effects.selectionShadow" = "选中卡片阴影";
 "animation.smooth" = "顺滑（默认）";
 "animation.elastic" = "弹性";
+"animation.jelly" = "果冻";
 "animation.fade" = "淡入";
 "animation.none" = "关闭";

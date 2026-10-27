@@ -109,6 +109,17 @@ struct MacOSRegression {
                         check(abs((slide!.fromValue as! NSNumber).doubleValue) <= 28,
                               "Large panels must not travel their full width or height")
                     }
+                    let squash = layer.animation(forKey: "paster.squash") as? CASpringAnimation
+                    if effect == .jelly && !reduceMotion {
+                        let from = (squash?.fromValue as? NSValue)?.caTransform3DValue
+                        check(squash?.isAdditive == true, "Jelly squash stacks on top of the slide")
+                        check(from.map { $0.m11 <= 1 && $0.m22 <= 1 && min($0.m11, $0.m22) >= 0.85 } == true,
+                              "Jelly only squashes, so nothing is clipped by the window edge")
+                        check(squash.map { $0.damping / (2 * ($0.stiffness * $0.mass).squareRoot()) < 0.5 } == true,
+                              "Jelly squash is underdamped enough to wobble")
+                    } else {
+                        check(squash == nil, "Only Jelly adds the squash animation")
+                    }
                     check(layer.opacity == 1 && CATransform3DIsIdentity(layer.transform),
                           "Model layer stays at its final state when entrance is interrupted")
                 }

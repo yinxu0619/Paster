@@ -159,5 +159,6 @@
 "effects.selectionShadow" = "Selected card shadow";
 "animation.smooth" = "Smooth (Default)";
 "animation.elastic" = "Elastic";
+"animation.jelly" = "Jelly";
 "animation.fade" = "Fade";
 "animation.none" = "Off";

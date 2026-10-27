@@ -47,11 +47,12 @@ final class FloatingPanel: NSPanel {
         case .cursor, .center: axis = "transform.translation.y"; offset = down * 10
         }
         let slide: CABasicAnimation
-        if effect == .elastic {
+        if effect == .elastic || effect == .jelly {
             let spring = CASpringAnimation(keyPath: axis)
             spring.mass = 1
-            spring.stiffness = 400
-            spring.damping = 26
+            // 果冻：阻尼比约 0.47（弹性约 0.65），冲过停靠位置后明显回弹一下。
+            spring.stiffness = effect == .jelly ? 260 : 400
+            spring.damping = effect == .jelly ? 15 : 26
             spring.duration = spring.settlingDuration
             slide = spring
         } else {
@@ -62,9 +63,44 @@ final class FloatingPanel: NSPanel {
         slide.fromValue = offset
         slide.toValue = 0
         layer.add(slide, forKey: "paster.slideIn")
+        guard effect == .jelly else { return }
+
+        // 果冻感来自叠加的挤压回弹：内容先沿入场方向压扁，再以更低的阻尼弹回原形。
+        // 以停靠边为支点，只缩不放（超出窗口的部分会被裁掉），横向尺寸不变。
+        // 全部是渲染服务器里的图层动画，不占主线程。
+        let size = layer.bounds.size
+        let bottomY: CGFloat = contentView.isFlipped ? size.height : 0
+        let pivot: CGPoint
+        let along: CGFloat = 0.9
+        let scale: (x: CGFloat, y: CGFloat)
+        switch position {
+        case .bottom: pivot = CGPoint(x: size.width / 2, y: bottomY); scale = (1, along)
+        case .top: pivot = CGPoint(x: size.width / 2, y: size.height - bottomY); scale = (1, along)
+        case .left: pivot = CGPoint(x: 0, y: size.height / 2); scale = (along, 1)
+        case .right: pivot = CGPoint(x: size.width, y: size.height / 2); scale = (along, 1)
+        case .cursor, .center: pivot = CGPoint(x: size.width / 2, y: size.height / 2); scale = (0.94, 0.94)
+        }
+        // 变换以 anchorPoint 为原点（NSView 的图层通常是左下角），换算成相对锚点的支点。
+        let p = CGPoint(x: pivot.x - layer.anchorPoint.x * size.width,
+                        y: pivot.y - layer.anchorPoint.y * size.height)
+        var squashed = CATransform3DMakeTranslation(p.x, p.y, 0)
+        squashed = CATransform3DScale(squashed, scale.x, scale.y, 1)
+        squashed = CATransform3DTranslate(squashed, -p.x, -p.y, 0)
+
+        let squash = CASpringAnimation(keyPath: "transform")
+        squash.mass = 1
+        squash.stiffness = 380
+        squash.damping = 13   // 阻尼比约 0.33：来回晃两下再停
+        squash.duration = squash.settlingDuration
+        squash.fromValue = NSValue(caTransform3D: squashed)
+        squash.toValue = NSValue(caTransform3D: CATransform3DIdentity)
+        // 叠加在滑入位移之上，而不是覆盖它。
+        squash.isAdditive = true
+        layer.add(squash, forKey: "paster.squash")
     }
 
     func cancelEntrance() {
+        contentView?.layer?.removeAnimation(forKey: "paster.squash")
         contentView?.layer?.removeAnimation(forKey: "paster.slideIn")
         contentView?.layer?.removeAnimation(forKey: "paster.fadeIn")
         hasShadow = true
