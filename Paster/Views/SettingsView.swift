@@ -10,6 +10,8 @@ struct SettingsView: View {
     @State private var showingClearConfirm = false
     /// 热键注册失败时的提示（通常是组合键已被其它应用占用）；成功或重新打开录制时清空。
     @State private var hotKeyError: String?
+    /// 正在拖动「横向条高度」滑杆：期间每次数值变化都更新屏幕上的预览。
+    @State private var isDraggingBarHeight = false
 
     var body: some View {
         TabView {
@@ -107,6 +109,17 @@ struct SettingsView: View {
                             Image(systemName: "rectangle.compress.vertical")
                         } maximumValueLabel: {
                             Image(systemName: "rectangle.expand.vertical")
+                        } onEditingChanged: { editing in
+                            // 拖动期间在屏幕上按真实位置画出横向条，松手后淡出。
+                            isDraggingBarHeight = editing
+                            if editing {
+                                BarHeightPreview.shared.show(height: settings.barHeight)
+                            } else {
+                                BarHeightPreview.shared.hide()
+                            }
+                        }
+                        .onChange(of: settings.barHeight) { _, height in
+                            if isDraggingBarHeight { BarHeightPreview.shared.show(height: height) }
                         }
                         barHeightPreview
                         Text(L10n.tr("settings.barHeightHint"))

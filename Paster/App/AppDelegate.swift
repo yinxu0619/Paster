@@ -227,15 +227,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let isSide = (position == .left || position == .right)
         let visible = screen?.visibleFrame ?? .zero
         // 横向条按用户选择停靠到真实屏幕边缘（含 Dock/菜单栏区域）或可用区域内。
-        let barRegion = barLayoutRegion(on: screen)
-        let barHeight = CGFloat(AppSettings.shared.barHeight)
         let attachEdge = AppSettings.shared.barAttachToScreenEdge
+        let barRegion = BarGeometry.region(on: screen, attachToEdge: attachEdge)
 
         let size: NSSize
         if isBar {
-            // 贴屏幕边缘时铺满整屏宽；停靠在可用区域内时两侧留出小边距。
-            let width = attachEdge ? barRegion.width : max(480, barRegion.width - 24)
-            size = NSSize(width: width, height: barHeight)
+            size = BarGeometry.size(height: CGFloat(AppSettings.shared.barHeight), region: barRegion, attachToEdge: attachEdge)
         } else if isSide {
             size = NSSize(width: 360, height: visible.height)
         } else {
@@ -374,22 +371,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return NSScreen.screens.first { NSMouseInRect(mouse, $0.frame, false) } ?? NSScreen.main
     }
 
-    /// 横向条停靠所依据的矩形区域：
-    /// - 贴屏幕边缘（`barAttachToScreenEdge`）：整块屏幕 `frame`；
-    /// - 否则：去掉 Dock / 菜单栏后的可用区域 `visibleFrame`。
-    private func barLayoutRegion(on screen: NSScreen?) -> NSRect {
-        if AppSettings.shared.barAttachToScreenEdge {
-            return screen?.frame ?? .zero
-        }
-        return screen?.visibleFrame ?? .zero
-    }
-
     /// 根据用户选择的呼出位置，计算面板最终的左下角坐标，并确保不超出可见区域。
     private func targetOrigin(for panel: NSPanel, screen: NSScreen?) -> NSPoint {
         let size = panel.frame.size
         guard let visible = screen?.visibleFrame else { return panel.frame.origin }
         // 横向条按开关决定贴真实屏幕边缘还是可用区域内。
-        let bar = barLayoutRegion(on: screen)
+        let attachEdge = AppSettings.shared.barAttachToScreenEdge
+        let bar = BarGeometry.region(on: screen, attachToEdge: attachEdge)
         let gap: CGFloat = 12
 
         switch AppSettings.shared.panelPosition {
@@ -399,13 +387,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             origin.x = min(max(origin.x, visible.minX + gap), visible.maxX - size.width - gap)
             origin.y = min(max(origin.y, visible.minY + gap), visible.maxY - size.height - gap)
             return origin
-        case .bottom:
-            // 贴边时紧贴屏幕最底沿；否则位于 Dock 之上并留出小间距。
-            let y = AppSettings.shared.barAttachToScreenEdge ? bar.minY : bar.minY + gap
-            return NSPoint(x: bar.midX - size.width / 2, y: y)
-        case .top:
-            // 贴边/贴菜单栏下沿，均紧贴区域上沿不留缝。
-            return NSPoint(x: bar.midX - size.width / 2, y: bar.maxY - size.height)
+        case .bottom, .top:
+            return BarGeometry.origin(size: size, region: bar, atTop: AppSettings.shared.panelPosition == .top,
+                                      attachToEdge: attachEdge)
         case .left:
             return NSPoint(x: visible.minX + gap, y: visible.midY - size.height / 2)
         case .right:

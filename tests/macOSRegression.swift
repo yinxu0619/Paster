@@ -88,6 +88,37 @@ struct MacOSRegression {
         check(action(0) == .pass, "Other keys pass through")
     }
 
+    static func checkBarHeightPreview() {
+        let region = NSRect(x: 100, y: 50, width: 1600, height: 1000)
+        let edge = BarGeometry.size(height: 300, region: region, attachToEdge: true)
+        check(edge == NSSize(width: 1600, height: 300), "An edge-attached bar spans the full screen width")
+        let inset = BarGeometry.size(height: 300, region: region, attachToEdge: false)
+        check(inset.width == 1576, "A bar inside the visible area keeps a small side margin")
+        check(BarGeometry.origin(size: edge, region: region, atTop: false, attachToEdge: true) == NSPoint(x: 100, y: 50),
+              "An edge-attached bottom bar sits on the very bottom edge")
+        check(BarGeometry.origin(size: inset, region: region, atTop: false, attachToEdge: false).y == 50 + BarGeometry.gap,
+              "A bottom bar inside the visible area clears the Dock by the gap")
+        check(BarGeometry.origin(size: edge, region: region, atTop: true, attachToEdge: true).y == 750,
+              "A top bar hangs from the top edge")
+
+        let settings = AppSettings.shared
+        let previous = (settings.panelPosition, settings.barAttachToScreenEdge)
+        defer { settings.panelPosition = previous.0; settings.barAttachToScreenEdge = previous.1 }
+        settings.panelPosition = .bottom
+        settings.barAttachToScreenEdge = true
+        let preview = BarHeightPreview.shared
+        preview.show(height: 320)
+        let screen = NSScreen.screens.first { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) } ?? NSScreen.main
+        check(preview.isVisible && preview.frame == BarGeometry.frame(height: 320, on: screen, atTop: false, attachToEdge: true),
+              "Dragging the height slider previews the bar at its real place and size")
+        preview.show(height: 400)
+        check(preview.frame?.height == 400, "The preview follows the slider while dragging")
+        preview.hide(after: 0)
+        let end = Date().addingTimeInterval(1)
+        while preview.isVisible && Date() < end { RunLoop.current.run(until: Date().addingTimeInterval(0.02)) }
+        check(!preview.isVisible, "Releasing the slider fades the preview out")
+    }
+
     static func checkPanelMotion() {
         let panel = FloatingPanel(contentRect: NSRect(x: 0, y: 0, width: 600, height: 300))
         defer { panel.close() }
@@ -180,6 +211,7 @@ struct MacOSRegression {
     static func main() throws {
         checkPanelContentReuse()
         checkPanelMotion()
+        checkBarHeightPreview()
         checkWheelNavigation()
         var seen: [Int: Data] = [:]
         var collision: (Data, Data)?
