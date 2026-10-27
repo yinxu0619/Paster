@@ -12,6 +12,7 @@ final class HotKeyRecorderButton: NSButton {
 
     private var isRecording = false
     private var eventMonitor: Any?
+    private var resignKeyObserver: NSObjectProtocol?
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -27,6 +28,15 @@ final class HotKeyRecorderButton: NSButton {
         if let eventMonitor {
             NSEvent.removeMonitor(eventMonitor)
         }
+        if let resignKeyObserver {
+            NotificationCenter.default.removeObserver(resignKeyObserver)
+        }
+    }
+
+    /// 按钮离开当前窗口（设置窗口关闭 / 视图被移除）时结束录制，避免监听器残留。
+    override func viewWillMove(toWindow newWindow: NSWindow?) {
+        if isRecording { stopRecording() }
+        super.viewWillMove(toWindow: newWindow)
     }
 
     private func setup() {
@@ -49,11 +59,20 @@ final class HotKeyRecorderButton: NSButton {
     }
 
     private func startRecording() {
+        guard let window else { return }
         isRecording = true
         title = L10n.tr("hotkey.pressShortcut")
         eventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown]) { [weak self] event in
-            self?.handle(event)
+            // 只拦截本按钮所在窗口的按键，面板等其它窗口照常工作。
+            guard let self, event.window === self.window else { return event }
+            self.handle(event)
             return nil // 录制期间拦截按键
+        }
+        // 窗口失去焦点（含关闭窗口）即取消录制，否则监听器会一直挂着。
+        resignKeyObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.didResignKeyNotification, object: window, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.stopRecording() }
         }
     }
 
@@ -63,6 +82,10 @@ final class HotKeyRecorderButton: NSButton {
             NSEvent.removeMonitor(eventMonitor)
         }
         eventMonitor = nil
+        if let resignKeyObserver {
+            NotificationCenter.default.removeObserver(resignKeyObserver)
+        }
+        resignKeyObserver = nil
         refreshTitle()
     }
 
@@ -75,6 +98,11 @@ final class HotKeyRecorderButton: NSButton {
         let carbon = KeyCodeTranslator.carbonModifiers(from: event.modifierFlags)
         // 必须包含主修饰键，否则忽略，继续等待。
         guard KeyCodeTranslator.hasPrimaryModifier(carbon) else { return }
+        // ⌘C / ⌘V 等系统常用组合注册成全局热键会劫持全系统的该操作，拒绝并继续等待。
+        guard !KeyCodeTranslator.isReservedShortcut(keyCode: UInt32(event.keyCode), carbonModifiers: carbon) else {
+            NSSound.beep()
+            return
+        }
 
         let newCode = UInt32(event.keyCode)
         // 只有注册成功才采用新组合；失败则保留旧值，refreshTitle() 会显示回原来的组合。

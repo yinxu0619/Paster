@@ -17,7 +17,10 @@ internal static partial class NativeMethods
     public const uint ModControl = 0x0002;
     public const uint ModShift = 0x0004;
     public const uint ModWin = 0x0008;
+    /// <summary>Holding the hotkey down must not fire it again on every keyboard auto-repeat.</summary>
+    public const uint ModNoRepeat = 0x4000;
     public const int SwHide = 0;
+    public const int SwShowNoActivate = 4;
     public const int SwShow = 5;
     public const uint SwpNoSize = 0x0001;
     public const uint SwpNoMove = 0x0002;
@@ -195,6 +198,34 @@ internal static partial class NativeMethods
 
     [LibraryImport("user32.dll")]
     public static partial IntPtr GetClipboardOwner();
+
+    [DllImport("user32.dll", EntryPoint = "RegisterClipboardFormatW", CharSet = CharSet.Unicode, SetLastError = true)]
+    public static extern uint RegisterClipboardFormat(string format);
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool IsClipboardFormatAvailable(uint format);
+
+    [LibraryImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool OpenClipboard(IntPtr hwndOwner);
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool CloseClipboard();
+
+    [LibraryImport("user32.dll")]
+    public static partial IntPtr GetClipboardData(uint format);
+
+    [LibraryImport("kernel32.dll")]
+    public static partial IntPtr GlobalLock(IntPtr hMem);
+
+    [LibraryImport("kernel32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool GlobalUnlock(IntPtr hMem);
+
+    [LibraryImport("kernel32.dll")]
+    public static partial nuint GlobalSize(IntPtr hMem);
 
     [LibraryImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]

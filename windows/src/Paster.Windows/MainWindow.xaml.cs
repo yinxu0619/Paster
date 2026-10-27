@@ -271,7 +271,7 @@ public sealed partial class MainWindow : Window
 
         if (_isVisible)
         {
-            HidePanel();
+            DismissPanel();
         }
         else
         {
@@ -1506,6 +1506,16 @@ public sealed partial class MainWindow : Window
         AppLog.Trace("Panel hidden (parked off-screen).");
     }
 
+    /// <summary>
+    /// The user closed the panel without pasting (Esc, the hotkey again). Unlike a focus-loss hide,
+    /// Paster is still the foreground window here, so focus goes back to where the panel came from.
+    /// </summary>
+    private void DismissPanel()
+    {
+        HidePanel();
+        ViewModel.RestoreTargetFocus();
+    }
+
     private void MainWindow_Activated(object sender, WindowActivatedEventArgs args)
     {
         if (_backdropConfiguration is not null)
@@ -1582,7 +1592,9 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        NativeMethods.ShowWindow(_hwnd, NativeMethods.SwShow);
+        // No activation: at startup the window is shown only to be parked, and must not take focus
+        // from whatever the user is doing. ShowMainWindowInternal activates it explicitly.
+        NativeMethods.ShowWindow(_hwnd, NativeMethods.SwShowNoActivate);
         _windowShownOnce = true;
     }
 
@@ -1873,7 +1885,7 @@ public sealed partial class MainWindow : Window
         switch (e.Key)
         {
             case VirtualKey.Escape:
-                HidePanel();
+                DismissPanel();
                 e.Handled = true;
                 break;
             case VirtualKey.Left when IsBarLayout:

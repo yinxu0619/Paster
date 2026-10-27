@@ -21,6 +21,15 @@ enum KeyCodeTranslator {
         (carbon & (UInt32(cmdKey) | UInt32(optionKey) | UInt32(controlKey))) != 0
     }
 
+    /// 是否为不应占用的系统常用组合（仅 ⌘ + 编辑 / 窗口 / 应用切换键），如 ⌘C、⌘V、⌘Q、⌘Tab。
+    static func isReservedShortcut(keyCode: UInt32, carbonModifiers carbon: UInt32) -> Bool {
+        guard carbon == UInt32(cmdKey) else { return false }
+        return reservedCommandKeys.contains(Int(keyCode))
+    }
+
+    /// A S Z X C V Q W H M Tab Space。
+    private static let reservedCommandKeys: Set<Int> = [0, 1, 6, 7, 8, 9, 12, 13, 4, 46, 48, 49]
+
     /// 修饰键符号（按 macOS 习惯顺序：⌃⌥⇧⌘）。
     static func modifierSymbols(carbon: UInt32) -> String {
         var symbols = ""

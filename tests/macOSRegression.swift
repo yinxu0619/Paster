@@ -3,6 +3,7 @@ import SwiftData
 import UniformTypeIdentifiers
 import ImageIO
 import QuartzCore
+import Carbon.HIToolbox
 
 @main
 @MainActor
@@ -67,6 +68,24 @@ struct MacOSRegression {
         panel.contentViewController = nil
         configure(.bar, NSSize(width: 1440, height: 300))
         check(creations == 4, "Missing content must be recreated even when layout is unchanged")
+    }
+
+    static func checkDeleteKeys() {
+        typealias K = KeyboardSelector
+        func action(_ key: UInt16, repeat isRepeat: Bool = false, composing: Bool = false,
+                    empty: Bool = true, selected: Bool = true, mods: NSEvent.ModifierFlags = []) -> K.Action {
+            K.action(keyCode: key, modifiers: mods, isRepeat: isRepeat, composing: composing,
+                     searchEmpty: empty, hasSelection: selected)
+        }
+        check(action(51) == .delete, "Backspace with empty search deletes the selection")
+        check(action(51, repeat: true) == .swallow, "Held backspace never deletes a run of records")
+        check(action(117, repeat: true) == .swallow, "Held forward delete never deletes a run of records")
+        check(action(51, empty: false) == .pass, "Backspace edits a non-empty search")
+        check(action(117, empty: false) == .pass, "Forward delete edits a non-empty search")
+        check(action(51, composing: true) == .pass, "Backspace during IME composition belongs to the input method")
+        check(action(51, selected: false) == .pass, "Backspace without selection passes through")
+        check(action(51, mods: .command) == .pass, "⌘⌫ is left to the key handler")
+        check(action(0) == .pass, "Other keys pass through")
     }
 
     static func checkPanelMotion() {
@@ -176,6 +195,10 @@ struct MacOSRegression {
         check(ClipboardSelection.afterDeleting(3, from: [1, 2, 3]) == 2, "Last deletion selects previous item")
         check(ClipboardSelection.afterDeleting(1, from: [1]) == nil, "Last remaining item leaves no selection")
         check(ClipboardSelection.afterDeleting(1, from: [1, 2]) == 2, "First deletion selects next item")
+        checkDeleteKeys()
+        check(KeyCodeTranslator.isReservedShortcut(keyCode: 8, carbonModifiers: UInt32(cmdKey)), "⌘C is reserved")
+        check(!KeyCodeTranslator.isReservedShortcut(keyCode: 9, carbonModifiers: UInt32(cmdKey | shiftKey)),
+              "⌘⇧V stays available as a hotkey")
         check(FloatingPanel.presentationLevel.rawValue > Int(CGWindowLevelForKey(.dockWindow)), "Panel must be above Dock")
         check(FloatingPanel.presentationLevel.rawValue < Int(CGWindowLevelForKey(.mainMenuWindow)), "Panel must stay below menus")
 

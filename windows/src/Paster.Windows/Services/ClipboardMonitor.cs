@@ -101,7 +101,18 @@ public sealed class ClipboardMonitor : MessageWindow
         var capturedAt = DateTimeOffset.Now;
         try
         {
-            var item = await BuildItemAsync(sourcePath);
+            // The first attempt runs synchronously inside WM_CLIPBOARDUPDATE, so the privacy check
+            // and the snapshot see the same clipboard. A retry may see a newer copy, which is why
+            // the check is repeated with every read rather than done once up front.
+            var item = await ClipboardRetry.RunAsync(() =>
+            {
+                if (ClipboardPrivacy.IsMarkedPrivate(Hwnd))
+                {
+                    AppLog.Trace("Skipped a clipboard update its source app marked as private.");
+                    return Task.FromResult<ClipboardItem?>(null);
+                }
+                return BuildItemAsync(sourcePath);
+            }, "read");
             if (item is not null) { item.CreatedAt = capturedAt; }
             return item;
         }

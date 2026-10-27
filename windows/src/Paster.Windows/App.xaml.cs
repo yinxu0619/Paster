@@ -16,6 +16,7 @@ public partial class App : Application
     private TrayIconService? _trayIconService;
     private bool _pendingRefresh;
     private bool _refreshRunning;
+    private bool _launched;
 
     public App()
     {
@@ -24,6 +25,9 @@ public partial class App : Application
         UnhandledException += (_, e) =>
         {
             AppLog.Error("Unhandled WinUI exception.", e.Exception);
+            // Once running, a failed paste or refresh must not take down the tray icon, clipboard
+            // monitor and hotkey with it. A startup failure still ends the process.
+            e.Handled = _launched;
         };
         AppLog.Info("App initialized.");
     }
@@ -126,6 +130,7 @@ public partial class App : Application
 
             _hotKeyService.Changed += (_, _) => _trayIconService?.UpdateHotKey(
                 HotKey.Describe(_hotKeyService.ActiveModifiers, _hotKeyService.ActiveVirtualKey, IsChinese(settings)));
+            _launched = true;
         }
         catch (Exception ex)
         {
@@ -165,6 +170,10 @@ public partial class App : Application
                 _pendingRefresh = false;
                 await viewModel.RefreshAsync();
             } while (_pendingRefresh && _window?.IsPanelVisible == true);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error("Failed to refresh clipboard history.", ex);
         }
         finally
         {

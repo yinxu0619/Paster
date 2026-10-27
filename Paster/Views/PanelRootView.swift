@@ -136,23 +136,33 @@ final class KeyboardSelector: ObservableObject {
             // 只处理悬浮面板上的按键，避免误吞设置等其它窗口的键盘事件。
             guard event.window is FloatingPanel else { return event }
 
-            // 仅响应不带修饰键的删除键（⌘⌫ 等组合仍由原有逻辑处理）。
-            let mods = event.modifierFlags.intersection([.command, .option, .control, .shift])
-            guard mods.isEmpty else { return event }
-
-            switch event.keyCode {
-            case 117:  // 前向删除（Del / fn+Delete）：直接删除选中项。
-                guard self.hasSelection else { return event }
-                self.onDelete?()
-                return nil
-            case 51:   // 退格（Delete）：搜索框为空时删除选中项，否则留给文本框编辑。
-                guard self.searchEmpty, self.hasSelection else { return event }
-                self.onDelete?()
-                return nil
-            default:
+            let composing = (event.window?.firstResponder as? NSTextView)?.hasMarkedText() ?? false
+            switch Self.action(keyCode: event.keyCode, modifiers: event.modifierFlags, isRepeat: event.isARepeat,
+                               composing: composing, searchEmpty: self.searchEmpty, hasSelection: self.hasSelection) {
+            case .pass:
                 return event
+            case .swallow:
+                return nil
+            case .delete:
+                self.onDelete?()
+                return nil
             }
         }
+    }
+
+    enum Action: Equatable { case pass, swallow, delete }
+
+    /// 删除键的处理规则（纯函数，便于回归测试）。
+    nonisolated static func action(keyCode: UInt16, modifiers: NSEvent.ModifierFlags, isRepeat: Bool,
+                                   composing: Bool, searchEmpty: Bool, hasSelection: Bool) -> Action {
+        // 仅响应不带修饰键的退格 51 / 前向删除 117（⌘⌫ 等组合仍由原有逻辑处理）。
+        guard keyCode == 51 || keyCode == 117,
+              modifiers.intersection([.command, .option, .control, .shift]).isEmpty else { return .pass }
+        // 输入法组字中（如拼音未上屏）searchText 仍为空，删除键属于输入法；
+        // 搜索框有字时删除键留给文本框编辑。
+        guard !composing, searchEmpty, hasSelection else { return .pass }
+        // 长按删除键时，自动重复会在删光搜索词后继续连删记录：重复事件只吞掉，不删除。
+        return isRepeat ? .swallow : .delete
     }
 
     func stop() {

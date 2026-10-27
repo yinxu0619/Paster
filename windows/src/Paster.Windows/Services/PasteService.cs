@@ -33,23 +33,54 @@ public sealed class PasteService : IDisposable
         _database = database;
     }
 
-    public async Task CopyAsync(ClipboardItem item, bool plainText = false)
+    /// <summary>
+    /// Writes the item to the clipboard. Returns false instead of throwing when the clipboard stays
+    /// locked by another process: callers are fire-and-forget UI handlers, where an exception
+    /// would take the whole tray app down.
+    /// </summary>
+    public async Task<bool> CopyAsync(ClipboardItem item, bool plainText = false)
     {
-        var package = new DataPackage();
-        package.RequestedOperation = DataPackageOperation.Copy;
-
-        if (plainText)
+        try
         {
-            package.SetText(item.PlainTextRepresentation);
-        }
-        else
-        {
-            await FillDataPackageAsync(package, item);
-        }
+            var package = new DataPackage();
+            package.RequestedOperation = DataPackageOperation.Copy;
 
-        ClipboardSelfChangeGuard.MarkSelfWrite();
-        Clipboard.SetContent(package);
-        Clipboard.Flush();
+            if (plainText)
+            {
+                package.SetText(item.PlainTextRepresentation);
+            }
+            else
+            {
+                await FillDataPackageAsync(package, item);
+            }
+
+            await ClipboardRetry.RunAsync(() =>
+            {
+                ClipboardSelfChangeGuard.MarkSelfWrite();
+                Clipboard.SetContent(package);
+                Clipboard.Flush();
+                return Task.CompletedTask;
+            }, "write");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error($"Could not write clipboard item {item.Id} to the clipboard.", ex);
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Hands focus back to the window the panel was summoned from. Used when the user closes the
+    /// panel without pasting; parking it off-screen alone would leave Paster in the foreground
+    /// and swallow whatever the user types next.
+    /// </summary>
+    public void RestoreTargetFocus()
+    {
+        var target = LastTargetWindow;
+        NativeMethods.GetWindowThreadProcessId(target, out var process);
+        if (!NativeMethods.IsWindow(target) || process != _targetProcess) { return; }
+        NativeMethods.SetForegroundWindow(target);
     }
 
     public async Task PasteAsync(ClipboardItem item, bool plainText = false)
@@ -60,7 +91,7 @@ public sealed class PasteService : IDisposable
         var targetProcess = _targetProcess;
         try
         {
-            await CopyAsync(item, plainText);
+            if (!await CopyAsync(item, plainText)) { return; }
             NativeMethods.GetWindowThreadProcessId(target, out var process);
             if (!NativeMethods.IsWindow(target) || process != targetProcess) { return; }
             NativeMethods.ShowWindow(target, NativeMethods.SwShow);

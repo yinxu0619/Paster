@@ -98,7 +98,9 @@ public sealed class HotKeyService : MessageWindow
 
     private bool TryRegister(uint modifiers, int virtualKey)
     {
-        _registered = NativeMethods.RegisterHotKey(Hwnd, HotKeyId, modifiers, (uint)virtualKey);
+        // MOD_NOREPEAT is applied here only, never persisted: holding Alt+C would otherwise toggle
+        // the panel on every auto-repeat and leave it in an arbitrary state.
+        _registered = NativeMethods.RegisterHotKey(Hwnd, HotKeyId, modifiers | NativeMethods.ModNoRepeat, (uint)virtualKey);
         LastError = _registered ? 0 : System.Runtime.InteropServices.Marshal.GetLastWin32Error();
         return _registered;
     }

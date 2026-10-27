@@ -189,7 +189,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             delete: { [weak self] item in self?.viewModel?.delete(item) },
             togglePin: { [weak self] item in self?.viewModel?.togglePin(item) },
             preview: { [weak self] item in self?.showPreview(item) },
-            dismiss: { [weak self] in self?.hidePanel() },
+            dismiss: { [weak self] in self?.dismissPanel() },
             openSettings: { [weak self] in
                 self?.hidePanel()
                 self?.openSettings()
@@ -199,7 +199,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let panel = FloatingPanel(contentRect: NSRect(x: 0, y: 0, width: 360, height: 480))
         panel.delegate = self
-        panel.onCancel = { [weak self] in self?.hidePanel() }
+        panel.onCancel = { [weak self] in self?.dismissPanel() }
         self.panel = panel
         configurePanelContent(panel, screen: currentScreen())
         prewarmPanel(panel)
@@ -256,7 +256,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func togglePanel() {
         if panel?.isVisible == true {
-            hidePanel()
+            dismissPanel()
         } else {
             showPanel()
         }
@@ -290,6 +290,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel?.orderOut(nil)
         panel?.cancelEntrance()
         panel?.alphaValue = 1
+    }
+
+    /// 用户主动收起面板（Esc / 再按热键 / 关闭按钮）：隐藏后把焦点还给呼出前的应用。
+    /// 呼出时 `NSApp.activate` 让 Paster 成了前台应用，若只 orderOut，前台会停在没有
+    /// key window 的 Paster 上，之后的按键全部丢失。失焦触发的隐藏不走这里——焦点已在别处。
+    private func dismissPanel() {
+        hidePanel()
+        guard let previousApp, !previousApp.isTerminated,
+              previousApp.processIdentifier != ProcessInfo.processInfo.processIdentifier else { return }
+        previousApp.activate()
     }
 
     /// 展示单条记录的大窗预览。

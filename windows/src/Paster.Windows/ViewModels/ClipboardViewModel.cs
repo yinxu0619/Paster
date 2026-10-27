@@ -191,6 +191,8 @@ public sealed class ClipboardViewModel : INotifyPropertyChanged
         await _pasteService.PasteAsync(SelectedItem, plainText);
     }
 
+    public void RestoreTargetFocus() => _pasteService.RestoreTargetFocus();
+
     public async Task CopySelectedAsync()
     {
         if (SelectedItem is not null)
