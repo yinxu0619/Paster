@@ -42,6 +42,32 @@ public sealed class ClipboardItem
         _ => (Text ?? string.Empty).Trim()
     };
 
+    /// <summary>
+    /// <see cref="PreviewText"/> cut to its first <paramref name="limit"/> characters, for the
+    /// cards. A card shows a few lines, but a TextBlock analyses and wraps the whole string it is
+    /// given, and stored text runs up to a million characters. Mirrors previewSnippet(limit:) on
+    /// macOS: leading whitespace is skipped without trimming (copying) the full text.
+    /// </summary>
+    public string PreviewSnippet(int limit)
+    {
+        if (Type is not (ClipboardItemType.Text or ClipboardItemType.RichText))
+        {
+            return Head(PreviewText, limit);
+        }
+
+        var raw = Text ?? string.Empty;
+        var start = 0;
+        while (start < raw.Length && char.IsWhiteSpace(raw[start])) { start++; }
+        return Head(raw[start..Math.Min(raw.Length, start + limit + 1)], limit).TrimEnd();
+    }
+
+    private static string Head(string text, int limit)
+    {
+        if (text.Length <= limit) { return text; }
+        // Never end on half of a surrogate pair, which would render as a replacement glyph.
+        return text[..(char.IsHighSurrogate(text[limit - 1]) ? limit - 1 : limit)];
+    }
+
     public string PlainTextRepresentation =>
         !string.IsNullOrWhiteSpace(Text) ? Text! :
         !string.IsNullOrWhiteSpace(Url) ? Url! :

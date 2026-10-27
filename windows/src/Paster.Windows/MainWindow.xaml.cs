@@ -111,6 +111,12 @@ public sealed partial class MainWindow : Window
     private readonly List<Border> _realizedCards = [];
 
     private const int PreviewCacheLimit = 40;
+
+    /// <summary>
+    /// Enough text to fill the tallest card (8 lines at the widest bar card, 4 in the vertical
+    /// layouts); anything beyond it would only be laid out to be clipped.
+    /// </summary>
+    private const int CardPreviewCharacterLimit = 800;
     private readonly Dictionary<Guid, BitmapImage> _previewCache = [];
     private readonly List<Guid> _previewOrder = [];
     private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _renderDebounceTimer;
@@ -912,7 +918,7 @@ public sealed partial class MainWindow : Window
         if (!hasImage)
         {
             parts.ImagePreview.Source = null;
-            parts.TextPreview.Text = item.PreviewText;
+            parts.TextPreview.Text = item.PreviewSnippet(CardPreviewCharacterLimit);
             return;
         }
 
@@ -1107,7 +1113,7 @@ public sealed partial class MainWindow : Window
 
         card.Child = layout;
 
-        // ~0.15s ease between the three background states, matching ClipboardCardView on macOS.
+        // ~0.15s ease into and out of the selected fill; hover changes are applied directly.
         var fillKeyFrame = new ColorAnimation
         {
             Duration = new Duration(TimeSpan.FromMilliseconds(150)),
@@ -1197,9 +1203,13 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    private bool IsSelected(CardParts parts) =>
+        parts.Item is not null && ReferenceEquals(ViewModel.SelectedItem, parts.Item);
+
     private void ApplyCardState(CardParts parts, bool animate)
     {
-        var selected = parts.Item is not null && ReferenceEquals(ViewModel.SelectedItem, parts.Item);
+        var selected = IsSelected(parts);
+        parts.ShownSelected = selected;
         var target = selected
             ? ThemeBrushes.CardSelectedColor
             : parts.IsHovered
@@ -1221,11 +1231,15 @@ public sealed partial class MainWindow : Window
         parts.FillAnimation.Begin();
     }
 
+    /// <summary>
+    /// Restyles only the cards whose selection state changed - normally the old and the new
+    /// selection - instead of restarting a fill animation on every realised card per keystroke.
+    /// </summary>
     private void UpdateSelectedCardStyles()
     {
         foreach (var card in _realizedCards)
         {
-            if (card.Tag is CardParts parts)
+            if (card.Tag is CardParts parts && parts.ShownSelected != IsSelected(parts))
             {
                 ApplyCardState(parts, animate: true);
             }
@@ -1271,7 +1285,10 @@ public sealed partial class MainWindow : Window
         if (sender is Border { Tag: CardParts parts })
         {
             parts.IsHovered = true;
-            ApplyCardState(parts, animate: true);
+            // Not animated: during a wheel glide the pointer crosses a new card every few frames,
+            // and each crossing would start two fades (as on macOS, where hover fades are off by
+            // default for the same reason).
+            ApplyCardState(parts, animate: false);
         }
     }
 
@@ -1280,7 +1297,7 @@ public sealed partial class MainWindow : Window
         if (sender is Border { Tag: CardParts parts })
         {
             parts.IsHovered = false;
-            ApplyCardState(parts, animate: true);
+            ApplyCardState(parts, animate: false);
         }
     }
 
@@ -2006,6 +2023,8 @@ public sealed partial class MainWindow : Window
         public required ColorAnimation FillKeyFrame { get; init; }
         public ClipboardItem? Item { get; set; }
         public bool IsHovered { get; set; }
+        /// <summary>Selection state the card was last styled for.</summary>
+        public bool ShownSelected { get; set; }
     }
 
     /// <summary>

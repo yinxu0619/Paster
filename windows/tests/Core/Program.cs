@@ -25,6 +25,14 @@ try
     bold.RtfData = [2, 1];
     Check(plain.DeduplicationKey != bold.DeduplicationKey, "RTF formatting must participate in deduplication");
 
+    var longText = new ClipboardItem { Text = "\n  " + new string('a', 5000) + "  " };
+    Check(longText.PreviewSnippet(800) == new string('a', 800), "Card preview skips leading whitespace and stops at the limit");
+    Check(new ClipboardItem { Text = "  short \n" }.PreviewSnippet(800) == "short", "Short previews match the trimmed text");
+    Check(new ClipboardItem { Text = new string('a', 799) + "😀" }.PreviewSnippet(800) == new string('a', 799),
+        "Card preview never splits a surrogate pair");
+    Check(new ClipboardItem { Type = ClipboardItemType.Url, Url = "https://example.com/" + new string('x', 900) }
+        .PreviewSnippet(800).Length == 800, "Non-text previews are capped too");
+
     var settingsPath = Path.Combine(root, "settings.json");
     var settings = AppSettings.Load(settingsPath);
     settings.PanelPosition = PanelPosition.Cursor;
