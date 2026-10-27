@@ -94,6 +94,33 @@ struct MotionCheck {
             pump(0.5)
             expect(panel.hasShadow && panel.isVisible, "Entrance \(effect.rawValue) settles with shadow")
         }
+        // Where each entrance actually starts on screen, read through the real window's layer tree:
+        // the hosting view is flipped but its superlayer is not, which once reversed every direction.
+        let layer = panel.contentView!.layer!
+        var rootLayer = layer
+        while let parent = rootLayer.superlayer { rootLayer = parent }
+        func screenEdges(_ transform: CATransform3D) -> (bottom: CGFloat, top: CGFloat) {
+            layer.transform = transform
+            defer { layer.transform = CATransform3DIdentity }
+            let ys = [CGPoint.zero, CGPoint(x: 0, y: layer.bounds.height)].map { layer.convert($0, to: rootLayer).y }
+            return (ys.min()!, ys.max()!)
+        }
+        let rest = screenEdges(CATransform3DIdentity)
+        for effect in [PanelAnimation.slideFromEdge, .smooth, .elastic, .jelly] {
+            panel.prepareEntrance(effect, position: .bottom, reduceMotion: false)
+            let from = (layer.animation(forKey: "paster.slideIn") as! CABasicAnimation).fromValue as! NSNumber
+            let start = screenEdges(CATransform3DMakeTranslation(0, CGFloat(from.doubleValue), 0))
+            expect(start.top < rest.top, "Bottom \(effect.rawValue) entrance starts below its resting place")
+            if effect == .slideFromEdge {
+                expect(start.top <= rest.bottom + 1, "Slide from Edge starts fully below the bottom edge")
+            }
+            if effect == .jelly, let squash = layer.animation(forKey: "paster.squash") as? CASpringAnimation {
+                let squashed = screenEdges((squash.fromValue as! NSValue).caTransform3DValue)
+                expect(abs(squashed.bottom - rest.bottom) < 1 && squashed.top < rest.top,
+                       "Bottom Jelly squashes against the bottom edge, leaving no gap underneath")
+            }
+            panel.cancelEntrance()
+        }
         print("PASS: real panel navigation and motion UI checks")
     }
 }

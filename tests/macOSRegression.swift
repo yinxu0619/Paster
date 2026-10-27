@@ -99,11 +99,19 @@ struct MacOSRegression {
                     let layer = panel.contentView!.layer!
                     let slide = layer.animation(forKey: "paster.slideIn") as? CABasicAnimation
                     let fade = layer.animation(forKey: "paster.fadeIn")
-                    check(panel.hasShadow, "Entrance must not switch the shadow off")
+                    let slidesFromEdge = effect == .slideFromEdge && !reduceMotion
+                        && position != .cursor && position != .center
+                    check(panel.hasShadow != slidesFromEdge,
+                          "Only Slide from Edge hides the static window shadow while it travels")
                     if effect == .none {
                         check(slide == nil && fade == nil, "Off cancels a previous entrance immediately")
                     } else if reduceMotion || effect == .fade {
                         check(slide == nil && fade != nil, "Reduce Motion permits opacity only")
+                    } else if slidesFromEdge {
+                        let along = position == .left || position == .right ? 600.0 : 300.0
+                        check(slide != nil && fade == nil, "Slide from Edge moves the solid panel without fading")
+                        check(abs((slide!.fromValue as! NSNumber).doubleValue) == along,
+                              "Slide from Edge travels the panel's full size, starting just past the screen edge")
                     } else {
                         check(slide != nil && fade != nil, "Motion effects include a short slide")
                         check(abs((slide!.fromValue as! NSNumber).doubleValue) <= 28,
@@ -132,6 +140,9 @@ struct MacOSRegression {
         panel.prepareEntrance(.smooth, position: .right, reduceMotion: false)
         check(panel.contentView!.layer!.animation(forKey: "paster.slideIn") != nil && panel.hasShadow,
               "Immediate reopening starts a fresh animation with its shadow intact")
+        panel.prepareEntrance(.slideFromEdge, position: .bottom, reduceMotion: false)
+        panel.cancelEntrance()
+        check(panel.hasShadow, "Dismissing a slide from the edge restores the window shadow")
     }
 
     static func checkWheelNavigation() {

@@ -160,5 +160,6 @@
 "animation.smooth" = "Smooth (Default)";
 "animation.elastic" = "Elastic";
 "animation.jelly" = "Jelly";
+"animation.slideFromEdge" = "Slide from Edge";
 "animation.fade" = "Fade";
 "animation.none" = "Off";

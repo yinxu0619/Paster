@@ -1,7 +1,7 @@
 import Foundation
 
 enum PanelAnimation: String, CaseIterable, Identifiable {
-    case smooth, elastic, jelly, fade, none
+    case smooth, elastic, jelly, slideFromEdge, fade, none
 
     var id: String { rawValue }
     var displayName: String { L10n.tr("animation.\(rawValue)") }

@@ -17,14 +17,23 @@ final class FloatingPanel: NSPanel {
     private var configuredContentSize: NSSize?
 
     /// Prepare before ordering the window front so its first frame already has the
-    /// entrance effect. Keep the shadow stable, and never defer input until completion.
+    /// entrance effect. Keep the shadow stable (except while sliding from the edge),
+    /// and never defer input until completion.
     func prepareEntrance(_ effect: PanelAnimation, position: PanelPosition, reduceMotion: Bool) {
         cancelEntrance()
         guard let contentView else { return }
         contentView.wantsLayer = true
         guard let layer = contentView.layer else { return }
-        let effect = effect.effective(reduceMotion: reduceMotion)
+        var effect = effect.effective(reduceMotion: reduceMotion)
         guard effect != .none else { return }
+        // 滑出只对贴边位置有意义；悬浮在光标处或屏幕中央时退回顺滑。
+        if effect == .slideFromEdge {
+            guard position == .cursor || position == .center else {
+                addSlideFromEdge(to: layer, position: position)
+                return
+            }
+            effect = .smooth
+        }
 
         let fade = CABasicAnimation(keyPath: "opacity")
         fade.fromValue = 0
@@ -35,8 +44,8 @@ final class FloatingPanel: NSPanel {
         guard effect != .fade else { return }
 
         // A short translation settles quickly even on a tall bar or sidebar.
-        // Hosting views can use flipped coordinates; enter from the chosen edge.
-        let down: CGFloat = contentView.isFlipped ? 1 : -1
+        // Enter from the chosen edge.
+        let down = Self.screenDown(of: layer)
         let axis: String
         let offset: CGFloat
         switch position {
@@ -69,7 +78,7 @@ final class FloatingPanel: NSPanel {
         // 以停靠边为支点，只缩不放（超出窗口的部分会被裁掉），横向尺寸不变。
         // 全部是渲染服务器里的图层动画，不占主线程。
         let size = layer.bounds.size
-        let bottomY: CGFloat = contentView.isFlipped ? size.height : 0
+        let bottomY: CGFloat = Self.screenDown(of: layer) > 0 ? size.height : 0
         let pivot: CGPoint
         let along: CGFloat = 0.9
         let scale: (x: CGFloat, y: CGFloat)
@@ -97,6 +106,48 @@ final class FloatingPanel: NSPanel {
         // 叠加在滑入位移之上，而不是覆盖它。
         squash.isAdditive = true
         layer.add(squash, forKey: "paster.squash")
+    }
+
+    /// 图层变换（位移、缩放支点）用的是父图层的坐标系，与内容视图自身是否翻转无关：
+    /// 托管视图是翻转的，但窗口里的父图层不是，屏幕上「向下」是 -y、底边是 y = 0。
+    /// 曾按 `contentView.isFlipped` 取方向，结果底部面板从上往下滑、果冻贴着顶边挤压。
+    static func screenDown(of layer: CALayer) -> CGFloat {
+        layer.superlayer?.contentsAreFlipped() == true ? 1 : -1
+    }
+
+    /// 每次入场递增：滑出期间关掉的窗口阴影只由同一次入场的完成回调恢复。
+    private var entranceToken = 0
+
+    /// 滑出：整块面板从停靠的屏幕边缘滑出（类似 Paste），位移等于面板在该方向上的尺寸，
+    /// 窗口外的部分被屏幕边缘挡住，看起来就是从边缘升起。仍是渲染服务器里的图层动画。
+    /// 窗口阴影按最终轮廓绘制、不随内容移动，滑动期间先关掉，落位后再打开，免得先出现一个空的阴影框。
+    private func addSlideFromEdge(to layer: CALayer, position: PanelPosition) {
+        let size = layer.bounds.size
+        let down = Self.screenDown(of: layer)
+        let axis: String
+        let offset: CGFloat
+        switch position {
+        case .top: axis = "transform.translation.y"; offset = -down * size.height
+        case .left: axis = "transform.translation.x"; offset = -size.width
+        case .right: axis = "transform.translation.x"; offset = size.width
+        case .bottom, .cursor, .center: axis = "transform.translation.y"; offset = down * size.height
+        }
+        let slide = CABasicAnimation(keyPath: axis)
+        slide.fromValue = offset
+        slide.toValue = 0
+        slide.duration = 0.26
+        slide.timingFunction = CAMediaTimingFunction(controlPoints: 0.2, 0.9, 0.3, 1)
+
+        hasShadow = false
+        entranceToken += 1
+        let token = entranceToken
+        CATransaction.begin()
+        CATransaction.setCompletionBlock { [weak self] in
+            guard let self, self.entranceToken == token else { return }
+            self.hasShadow = true
+        }
+        layer.add(slide, forKey: "paster.slideIn")
+        CATransaction.commit()
     }
 
     func cancelEntrance() {

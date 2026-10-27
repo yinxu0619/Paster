@@ -160,5 +160,6 @@
 "animation.smooth" = "顺滑（默认）";
 "animation.elastic" = "弹性";
 "animation.jelly" = "果冻";
+"animation.slideFromEdge" = "从边缘滑出";
 "animation.fade" = "淡入";
 "animation.none" = "关闭";
