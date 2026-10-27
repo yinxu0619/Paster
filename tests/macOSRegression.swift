@@ -196,6 +196,12 @@ struct MacOSRegression {
         check(ClipboardSelection.afterDeleting(1, from: [1]) == nil, "Last remaining item leaves no selection")
         check(ClipboardSelection.afterDeleting(1, from: [1, 2]) == 2, "First deletion selects next item")
         checkDeleteKeys()
+        let padded = ClipboardItem(text: "  \n hello world \n ")
+        check(padded.previewSnippet(limit: 100) == padded.previewText, "Short snippet matches the trimmed preview")
+        check(padded.previewSnippet(limit: 5) == "hello", "Snippet is bounded and starts after leading whitespace")
+        check(ClipboardItem(text: String(repeating: "x", count: 50_000)).previewSnippet(limit: 800).count == 800,
+              "Long text is cut before layout")
+        check(ClipboardItem(text: " \n ").previewSnippet(limit: 10).isEmpty, "Whitespace-only text yields an empty snippet")
         check(KeyCodeTranslator.isReservedShortcut(keyCode: 8, carbonModifiers: UInt32(cmdKey)), "⌘C is reserved")
         check(!KeyCodeTranslator.isReservedShortcut(keyCode: 9, carbonModifiers: UInt32(cmdKey | shiftKey)),
               "⌘⇧V stays available as a hotkey")

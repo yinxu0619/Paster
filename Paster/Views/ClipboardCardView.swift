@@ -123,7 +123,8 @@ struct ClipboardCardView: View {
     }
 
     private var textPreview: some View {
-        Text(String(item.previewText.prefix(2_000)))
+        // 横条 20 行 × 每行约 30 字、竖向 4 行就能填满卡片，多余文字只会白白参与排版。
+        Text(item.previewSnippet(limit: fillHeight ? 800 : 240))
             .font(.system(size: 13))
             .lineLimit(fillHeight ? 20 : 4)
             .frame(maxWidth: .infinity, maxHeight: fillHeight ? .infinity : nil, alignment: .topLeading)

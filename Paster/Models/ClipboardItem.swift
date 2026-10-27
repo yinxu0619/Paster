@@ -144,6 +144,21 @@ extension ClipboardItem {
         }
     }
 
+    /// 卡片展示用的预览：与 `previewText` 相同，但只取前 `limit` 个字符，
+    /// 避免为了显示几行字而对整段长文本做 trim 和排版。
+    func previewSnippet(limit: Int) -> String {
+        switch type {
+        case .text, .richText:
+            let raw = text ?? ""
+            let start = raw.firstIndex { !$0.isWhitespace } ?? raw.endIndex
+            let head = raw[start...].prefix(limit)
+            guard let end = head.lastIndex(where: { !$0.isWhitespace }) else { return "" }
+            return String(head[...end])
+        default:
+            return String(previewText.prefix(limit))
+        }
+    }
+
     /// 文件类型的展示名称（取路径最后一段，多文件换行展示）。
     var fileDisplayNames: String {
         guard let raw = fileURLString ?? text else { return "文件" }

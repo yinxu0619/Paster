@@ -17,21 +17,21 @@ final class ClipboardViewModel: ObservableObject {
         self.context = context
     }
 
-    /// 执行粘贴：按原始格式写回剪贴板，随后延迟模拟 ⌘V。
+    /// 执行粘贴：按原始格式写回剪贴板，目标应用在前台后立即模拟 ⌘V。
     ///
-    /// 调用方（`AppDelegate`）需先隐藏面板并激活目标应用，再调用本方法，
-    /// 以保证按键发送时焦点已回到目标应用（否则只会替换剪贴板而粘贴不进去）。
-    func paste(_ item: ClipboardItem) {
+    /// 调用方（`AppDelegate`）需先隐藏面板，以保证按键发送时焦点已回到目标应用
+    /// （否则只会替换剪贴板而粘贴不进去）。
+    func paste(_ item: ClipboardItem, into target: NSRunningApplication?) {
         let changeCount = pasteService.copyToPasteboard(item)
         monitor.markSelfCopy(changeCount: changeCount)
-        scheduleKeystroke()
+        sendKeystroke(when: target)
     }
 
     /// 纯文本粘贴：剥离格式后写回剪贴板并粘贴。
-    func pasteAsPlainText(_ item: ClipboardItem) {
+    func pasteAsPlainText(_ item: ClipboardItem, into target: NSRunningApplication?) {
         let changeCount = pasteService.copyAsPlainText(item)
         monitor.markSelfCopy(changeCount: changeCount)
-        scheduleKeystroke()
+        sendKeystroke(when: target)
     }
 
     /// 重新复制到系统剪贴板（不触发粘贴）。
@@ -65,9 +65,20 @@ final class ClipboardViewModel: ObservableObject {
         }
     }
 
-    /// 等待目标应用重新获得焦点后再发送 ⌘V。
-    private func scheduleKeystroke() {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { [pasteService] in
+    /// 目标应用在前台后发送 ⌘V。
+    ///
+    /// 面板不激活 Paster，呼出期间目标应用一直在前台，隐藏面板后的下一轮 runloop 即可发送，
+    /// 不再固定等 120ms（实测切回原应用不到 1ms，这 120ms 就是粘贴延迟的大头）。
+    /// 只有目标确需重新激活时才轮询等它切回来，最多 0.5 秒，超时仍照常发送。
+    private func sendKeystroke(when target: NSRunningApplication?, deadline: Date = .now + 0.5) {
+        DispatchQueue.main.async { [weak self, pasteService] in
+            let frontmost = NSWorkspace.shared.frontmostApplication?.processIdentifier
+            if let target, frontmost != target.processIdentifier, Date.now < deadline {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.01) {
+                    self?.sendKeystroke(when: target, deadline: deadline)
+                }
+                return
+            }
             pasteService.simulatePasteKeystroke()
         }
     }

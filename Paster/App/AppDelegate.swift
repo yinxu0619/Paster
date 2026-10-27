@@ -278,11 +278,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.prepareEntrance(AppSettings.shared.panelAnimation,
                               position: AppSettings.shared.panelPosition,
                               reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
-        // 先立即上屏并取得键盘焦点（非激活面板可在不切换前台应用的前提下成为 key window），
-        // 再补一次应用激活。顺序很关键：把较慢的 activate 放到上屏之后，避免它阻塞面板出现。
+        // 非激活面板不切换前台应用即可成为 key window 接收键盘输入（与 Paste / Spotlight 相同）。
+        // 不再 `NSApp.activate`：实测它在入场动画开头额外占用主线程约 30ms，还会切换菜单栏，
+        // 并让粘贴前必须先把原应用重新激活。
         panel.makeKeyAndOrderFront(nil)
-
-        NSApp.activate(ignoringOtherApps: true)
     }
 
     private func hidePanel() {
@@ -292,14 +291,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel?.alphaValue = 1
     }
 
-    /// 用户主动收起面板（Esc / 再按热键 / 关闭按钮）：隐藏后把焦点还给呼出前的应用。
-    /// 呼出时 `NSApp.activate` 让 Paster 成了前台应用，若只 orderOut，前台会停在没有
-    /// key window 的 Paster 上，之后的按键全部丢失。失焦触发的隐藏不走这里——焦点已在别处。
+    /// 用户主动收起面板（Esc / 再按热键 / 关闭按钮）：隐藏后确保焦点回到呼出前的应用。
+    /// 面板不激活 Paster，通常原应用一直在前台、这里是空操作；但若 Paster 期间被激活
+    /// （例如打开过右键菜单里的预览），只 orderOut 会让前台停在没有 key window 的 Paster 上。
+    /// 失焦触发的隐藏不走这里——焦点已在别处。
     private func dismissPanel() {
         hidePanel()
-        guard let previousApp, !previousApp.isTerminated,
-              previousApp.processIdentifier != ProcessInfo.processInfo.processIdentifier else { return }
-        previousApp.activate()
+        guard NSApp.isActive else { return }
+        pasteTarget?.activate()
     }
 
     /// 展示单条记录的大窗预览。
@@ -327,15 +326,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard ensureAccessibilityOrGuide(for: item) else { return }
         // 顺序很关键：先隐藏面板让 Paster 让出焦点，再激活目标应用，最后写回剪贴板并延迟发送 ⌘V。
         hidePanel()
-        previousApp?.activate()
-        viewModel?.paste(item)
+        let target = pasteTarget
+        target?.activate()
+        viewModel?.paste(item, into: target)
     }
 
     private func handlePastePlain(_ item: ClipboardItem) {
         guard ensureAccessibilityOrGuide(for: item) else { return }
         hidePanel()
-        previousApp?.activate()
-        viewModel?.pasteAsPlainText(item)
+        let target = pasteTarget
+        target?.activate()
+        viewModel?.pasteAsPlainText(item, into: target)
+    }
+
+    /// 粘贴的目标应用：呼出面板前的前台应用（Paster 自己或已退出的应用不算）。
+    private var pasteTarget: NSRunningApplication? {
+        guard let previousApp, !previousApp.isTerminated,
+              previousApp.processIdentifier != ProcessInfo.processInfo.processIdentifier else { return nil }
+        return previousApp
     }
 
     /// 检查辅助功能权限；缺失则把内容写入剪贴板并弹窗引导授权，返回 false 表示本次不再尝试模拟按键。

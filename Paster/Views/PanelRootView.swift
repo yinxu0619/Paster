@@ -175,6 +175,42 @@ final class KeyboardSelector: ObservableObject {
     }
 }
 
+/// 卡片右键菜单。
+///
+/// SwiftUI 会在每次列表刷新（例如每切换一次选中）时为每张可见卡片求值一遍菜单内容，
+/// 实测连同取文案约占刷新主线程时间一成。菜单只依赖下面几项输入，相同则跳过重建。
+struct CardContextMenu: View, Equatable {
+    let item: ClipboardItem
+    let isPinned: Bool
+    let plainPasteModifiers: EventModifiers
+    let language: AppLanguage
+    let actions: PanelActions
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.item.persistentModelID == rhs.item.persistentModelID && lhs.isPinned == rhs.isPinned
+            && lhs.plainPasteModifiers == rhs.plainPasteModifiers && lhs.language == rhs.language
+    }
+
+    var body: some View {
+        // 各项右侧显示快捷键（与 handleKeyPress / KeyboardSelector 的选中态快捷键一致），
+        // 仅作提示、且只在菜单打开时生效，不会与列表里逐条卡片重复注册全局快捷键。
+        Button(L10n.tr("menu.paste")) { actions.paste(item) }
+            .keyboardShortcut(.return, modifiers: [])
+        Button(L10n.tr("menu.pastePlain")) { actions.pastePlain(item) }
+            .keyboardShortcut(.return, modifiers: plainPasteModifiers)
+        Button(L10n.tr("menu.copy")) { actions.copy(item) }
+            .keyboardShortcut("c", modifiers: .command)
+        Divider()
+        Button(L10n.tr("menu.preview")) { actions.preview(item) }
+            .keyboardShortcut("y", modifiers: .command)
+        Button(isPinned ? L10n.tr("menu.unpin") : L10n.tr("menu.pin")) { actions.togglePin(item) }
+            .keyboardShortcut("p", modifiers: .command)
+        Divider()
+        Button(L10n.tr("menu.delete"), role: .destructive) { actions.delete(item) }
+            .keyboardShortcut(.delete, modifiers: [])
+    }
+}
+
 /// 面板布局形态。
 /// - `vertical`：跟随光标 / 屏幕侧边的竖向卡片列表（默认）。
 /// - `bar`：停靠屏幕上/下边缘的全宽横向平铺条（类似 Paste，扫读效率更高）。
@@ -352,26 +388,32 @@ struct PanelRootView: View {
     }
 
     private func barList(_ visible: VisibleItems) -> some View {
-        ScrollViewReader { proxy in
-            ScrollView(.horizontal, showsIndicators: false) {
-                // LazyHStack 仅渲染可见瓦片，支持大量历史横向流畅滚动。
-                LazyHStack(spacing: 10) {
-                    ForEach(visible.ordered) { tile(for: $0) }
+        // 瓦片给定确切宽高：LazyHStack 定位时不必再逐张测量卡片内容（实测掉帧时约两成主线程
+        // 时间花在测量卡片文字上），只有真正上屏的瓦片才做文字排版。
+        GeometryReader { geometry in
+            let tileHeight = max(60, geometry.size.height - Self.barTileVerticalPadding * 2)
+            ScrollViewReader { proxy in
+                ScrollView(.horizontal, showsIndicators: false) {
+                    // LazyHStack 仅渲染可见瓦片，支持大量历史横向流畅滚动。
+                    LazyHStack(spacing: 10) {
+                        ForEach(visible.ordered) { tile(for: $0, height: tileHeight) }
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, Self.barTileVerticalPadding)
                 }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 12)
-            }
-            .onChange(of: scrollRequest) { _, request in
-                guard let request else { return }
-                reveal(request, using: proxy)
+                .onChange(of: scrollRequest) { _, request in
+                    guard let request else { return }
+                    reveal(request, using: proxy)
+                }
             }
         }
     }
 
-    private func tile(for item: ClipboardItem) -> some View {
+    private static let barTileVerticalPadding: CGFloat = 12
+
+    private func tile(for item: ClipboardItem, height: CGFloat) -> some View {
         ClipboardCardView(item: item, isSelected: selectedID == item.persistentModelID, fillHeight: true)
-            .frame(width: 210)
-            .frame(maxHeight: .infinity)
+            .frame(width: 210, height: height)
             .id(item.persistentModelID)
             .contentShape(Rectangle())
             // 单击用 simultaneousGesture 即时选中，避免与双击互斥时被延迟约 0.3s。
@@ -474,25 +516,11 @@ struct PanelRootView: View {
             .contextMenu { contextMenu(for: item) }
     }
 
-    @ViewBuilder
     private func contextMenu(for item: ClipboardItem) -> some View {
-        // 各项右侧显示快捷键（与下方 handleKeyPress / KeyboardSelector 的选中态快捷键一致）。
-        // contextMenu 内容按需惰性构建，这里的 keyboardShortcut 仅作提示、且只在菜单打开时生效，
-        // 不会与列表里逐条卡片重复注册全局快捷键。
-        Button(L10n.tr("menu.paste")) { actions.paste(item) }
-            .keyboardShortcut(.return, modifiers: [])
-        Button(L10n.tr("menu.pastePlain")) { actions.pastePlain(item) }
-            .keyboardShortcut(.return, modifiers: settings.plainPasteShortcut.eventModifiers)
-        Button(L10n.tr("menu.copy")) { actions.copy(item) }
-            .keyboardShortcut("c", modifiers: .command)
-        Divider()
-        Button(L10n.tr("menu.preview")) { actions.preview(item) }
-            .keyboardShortcut("y", modifiers: .command)
-        Button(item.isPinned ? L10n.tr("menu.unpin") : L10n.tr("menu.pin")) { actions.togglePin(item) }
-            .keyboardShortcut("p", modifiers: .command)
-        Divider()
-        Button(L10n.tr("menu.delete"), role: .destructive) { actions.delete(item) }
-            .keyboardShortcut(.delete, modifiers: [])
+        CardContextMenu(item: item, isPinned: item.isPinned,
+                        plainPasteModifiers: settings.plainPasteShortcut.eventModifiers,
+                        language: settings.appLanguage, actions: actions)
+            .equatable()
     }
 
     // MARK: - 数据筛选与分组
