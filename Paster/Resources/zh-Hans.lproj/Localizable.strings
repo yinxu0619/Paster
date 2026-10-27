@@ -141,10 +141,22 @@
 "alert.showStorage" = "显示存储目录";
 
 /* Motion preferences */
-"settings.animations" = "动画";
+"settings.animations" = "动效与性能";
 "settings.panelAnimation" = "呼出效果";
 "settings.listAnimations" = "列表滚动与选中动画";
 "settings.animationsHint" = "自动遵循系统“减少动态效果”设置。触控板保持连续滚动。";
+"effects.preset" = "模式";
+"effects.preset.effects" = "特效优先";
+"effects.preset.balanced" = "均衡";
+"effects.preset.performance" = "响应优先";
+"effects.preset.custom" = "自定义";
+"effects.preset.effects.hint" = "所有动效全开。鼠标悬停渐变会让触控板滑动明显变重，大屏或高刷新率屏幕上可能掉帧。";
+"effects.preset.balanced.hint" = "只关闭开销最大的鼠标悬停渐变，其余动效保留，触控板滑动明显更跟手。推荐。";
+"effects.preset.performance.hint" = "关闭全部动效：面板瞬间出现，选中与滚动即时到位。";
+"effects.preset.custom.hint" = "当前为自定义组合，选择上方任一模式可一键恢复。";
+"effects.keyRepeatAnimation" = "按住方向键时也播放动画";
+"effects.hoverAnimation" = "鼠标悬停渐变";
+"effects.selectionShadow" = "选中卡片阴影";
 "animation.smooth" = "顺滑（默认）";
 "animation.elastic" = "弹性";
 "animation.fade" = "淡入";

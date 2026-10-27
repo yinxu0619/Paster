@@ -141,10 +141,22 @@
 "alert.showStorage" = "Show Storage Folder";
 
 /* Motion preferences */
-"settings.animations" = "Animations";
+"settings.animations" = "Motion & Performance";
 "settings.panelAnimation" = "Panel Entrance";
 "settings.listAnimations" = "Animate selection and list scrolling";
 "settings.animationsHint" = "Follows the system Reduce Motion setting. Trackpad scrolling stays continuous.";
+"effects.preset" = "Mode";
+"effects.preset.effects" = "Effects";
+"effects.preset.balanced" = "Balanced";
+"effects.preset.performance" = "Responsive";
+"effects.preset.custom" = "Custom";
+"effects.preset.effects.hint" = "Every effect on. The hover fade makes trackpad scrolling much heavier and may drop frames on large or high-refresh displays.";
+"effects.preset.balanced.hint" = "Turns off only the costly hover fade and keeps every other effect; trackpad scrolling feels noticeably lighter. Recommended.";
+"effects.preset.performance.hint" = "All effects off: the panel appears instantly and selection and scrolling land immediately.";
+"effects.preset.custom.hint" = "Custom combination. Pick a mode above to reset it in one click.";
+"effects.keyRepeatAnimation" = "Animate while an arrow key is held";
+"effects.hoverAnimation" = "Hover fade";
+"effects.selectionShadow" = "Selected card shadow";
 "animation.smooth" = "Smooth (Default)";
 "animation.elastic" = "Elastic";
 "animation.fade" = "Fade";

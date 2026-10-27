@@ -117,12 +117,28 @@ struct SettingsView: View {
             }
 
             Section(L10n.tr("settings.animations")) {
+                Picker(L10n.tr("effects.preset"), selection: $settings.effectsPreset) {
+                    ForEach(EffectsPreset.selectable) { preset in
+                        Text(preset.displayName).tag(preset)
+                    }
+                    if settings.effectsPreset == .custom {
+                        Text(EffectsPreset.custom.displayName).tag(EffectsPreset.custom)
+                    }
+                }
+                .pickerStyle(.segmented)
+                Text(L10n.tr("effects.preset.\(settings.effectsPreset.rawValue).hint"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 Picker(L10n.tr("settings.panelAnimation"), selection: $settings.panelAnimation) {
                     ForEach(PanelAnimation.allCases) { animation in
                         Text(animation.displayName).tag(animation)
                     }
                 }
                 Toggle(L10n.tr("settings.listAnimations"), isOn: $settings.listAnimations)
+                Toggle(L10n.tr("effects.keyRepeatAnimation"), isOn: $settings.keyRepeatAnimation)
+                    .disabled(!settings.listAnimations)
+                Toggle(L10n.tr("effects.hoverAnimation"), isOn: $settings.hoverAnimation)
+                Toggle(L10n.tr("effects.selectionShadow"), isOn: $settings.selectionShadow)
                 Text(L10n.tr("settings.animationsHint"))
                     .font(.caption)
                     .foregroundStyle(.secondary)

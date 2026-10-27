@@ -587,17 +587,17 @@ struct PanelRootView: View {
             if let last = orderedVisible.last?.persistentModelID { selectAndScroll(last) }
             return .handled
         case .upArrow:
-            moveSelection(by: -1)
+            moveSelection(by: -1, animated: keyPress.phase != .repeat || settings.keyRepeatAnimation)
             return .handled
         case .downArrow:
-            moveSelection(by: 1)
+            moveSelection(by: 1, animated: keyPress.phase != .repeat || settings.keyRepeatAnimation)
             return .handled
         case .leftArrow where layout == .bar:
             // 横向布局下用左右键导航；竖向布局保留方向键在搜索框内移动光标。
-            moveSelection(by: -1)
+            moveSelection(by: -1, animated: keyPress.phase != .repeat || settings.keyRepeatAnimation)
             return .handled
         case .rightArrow where layout == .bar:
-            moveSelection(by: 1)
+            moveSelection(by: 1, animated: keyPress.phase != .repeat || settings.keyRepeatAnimation)
             return .handled
         case .return:
             if let item = selectedItem {
@@ -645,14 +645,16 @@ struct PanelRootView: View {
         return .ignored
     }
 
-    private func moveSelection(by delta: Int) {
+    /// 按住方向键（自动重复）时是否播放动画由 `keyRepeatAnimation` 决定（见 `EffectsOptions`），
+    /// 单按始终按 `listAnimations` 播放。
+    private func moveSelection(by delta: Int, animated: Bool = true) {
         let ids = orderedVisible.map(\.persistentModelID)
         guard !ids.isEmpty else { return }
         if let selectedID, let index = ids.firstIndex(of: selectedID) {
             let next = max(0, min(ids.count - 1, index + delta))
-            selectAndScroll(ids[next])
+            selectAndScroll(ids[next], animated: animated)
         } else {
-            selectAndScroll(delta >= 0 ? ids.first : ids.last)
+            selectAndScroll(delta >= 0 ? ids.first : ids.last, animated: animated)
         }
     }
 
@@ -668,7 +670,10 @@ struct PanelRootView: View {
     }
 
     private func selectAndScroll(_ id: PersistentIdentifier?, animated: Bool = true) {
-        selectedID = id
+        // 关掉的是卡片上 `.animation(value: isSelected)` 这类隐式动画；滚动动画由 ScrollRequest 控制。
+        var transaction = Transaction()
+        transaction.disablesAnimations = !animated
+        withTransaction(transaction) { selectedID = id }
         wheel.current = id
         scrollRequest = id.map { ScrollRequest(id: $0, animated: animated) }
     }

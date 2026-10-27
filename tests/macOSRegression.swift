@@ -196,6 +196,17 @@ struct MacOSRegression {
         check(ClipboardSelection.afterDeleting(1, from: [1]) == nil, "Last remaining item leaves no selection")
         check(ClipboardSelection.afterDeleting(1, from: [1, 2]) == 2, "First deletion selects next item")
         checkDeleteKeys()
+        for preset in EffectsPreset.selectable {
+            check(EffectsPreset.matching(preset.options!) == preset, "Preset \(preset) round-trips through its options")
+        }
+        var tweaked = EffectsPreset.balanced.options!
+        tweaked.selectionShadow = false
+        check(EffectsPreset.matching(tweaked) == .custom, "A changed detail reads back as a custom combination")
+        tweaked = EffectsPreset.balanced.options!
+        tweaked.hoverAnimation = true
+        check(EffectsPreset.matching(tweaked) == .effects, "Balanced differs from Effects only by the hover fade")
+        check(EffectsPreset.balanced.options!.hoverAnimation == false, "Balanced keeps the costly hover fade off")
+        check(EffectsPreset.performance.options!.panelAnimation == .none, "Responsive mode shows the panel instantly")
         let padded = ClipboardItem(text: "  \n hello world \n ")
         check(padded.previewSnippet(limit: 100) == padded.previewText, "Short snippet matches the trimmed preview")
         check(padded.previewSnippet(limit: 5) == "hello", "Snippet is bounded and starts after leading whitespace")

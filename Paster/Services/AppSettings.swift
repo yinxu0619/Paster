@@ -26,6 +26,9 @@ final class AppSettings: ObservableObject {
         static let panelPosition = "panelPosition"
         static let panelAnimation = "panelAnimation"
         static let listAnimations = "listAnimations"
+        static let hoverAnimation = "hoverAnimation"
+        static let keyRepeatAnimation = "keyRepeatAnimation"
+        static let selectionShadow = "selectionShadow"
         static let barHeight = "barHeight"
         static let barAttachToScreenEdge = "barAttachToScreenEdge"
         static let plainPasteShortcut = "plainPasteShortcut"
@@ -84,6 +87,37 @@ final class AppSettings: ObservableObject {
         didSet { defaults.set(listAnimations, forKey: Keys.listAnimations) }
     }
 
+    @Published var hoverAnimation: Bool {
+        didSet { defaults.set(hoverAnimation, forKey: Keys.hoverAnimation) }
+    }
+
+    @Published var keyRepeatAnimation: Bool {
+        didSet { defaults.set(keyRepeatAnimation, forKey: Keys.keyRepeatAnimation) }
+    }
+
+    @Published var selectionShadow: Bool {
+        didSet { defaults.set(selectionShadow, forKey: Keys.selectionShadow) }
+    }
+
+    /// 当前动效细项。
+    var effectsOptions: EffectsOptions {
+        EffectsOptions(panelAnimation: panelAnimation, listAnimations: listAnimations, hoverAnimation: hoverAnimation,
+                       keyRepeatAnimation: keyRepeatAnimation, selectionShadow: selectionShadow)
+    }
+
+    /// 动效预设：读取时按细项推断（不一致即「自定义」），选择预设时一次写入全部细项。
+    var effectsPreset: EffectsPreset {
+        get { EffectsPreset.matching(effectsOptions) }
+        set {
+            guard let options = newValue.options else { return }
+            panelAnimation = options.panelAnimation
+            listAnimations = options.listAnimations
+            hoverAnimation = options.hoverAnimation
+            keyRepeatAnimation = options.keyRepeatAnimation
+            selectionShadow = options.selectionShadow
+        }
+    }
+
     /// 横向平铺条（底部/顶部）的高度，单位 pt。
     @Published var barHeight: Double {
         didSet {
@@ -122,6 +156,11 @@ final class AppSettings: ObservableObject {
         panelPosition = PanelPosition(rawValue: defaults.string(forKey: Keys.panelPosition) ?? "") ?? .cursor
         panelAnimation = PanelAnimation(rawValue: defaults.string(forKey: Keys.panelAnimation) ?? "") ?? .smooth
         listAnimations = defaults.object(forKey: Keys.listAnimations) as? Bool ?? true
+        // 新增细项默认取「均衡」：老用户未改过动画设置时，升级后即落在均衡预设上。
+        let balanced = EffectsPreset.balanced.options!
+        hoverAnimation = defaults.object(forKey: Keys.hoverAnimation) as? Bool ?? balanced.hoverAnimation
+        keyRepeatAnimation = defaults.object(forKey: Keys.keyRepeatAnimation) as? Bool ?? balanced.keyRepeatAnimation
+        selectionShadow = defaults.object(forKey: Keys.selectionShadow) as? Bool ?? balanced.selectionShadow
         barHeight = defaults.object(forKey: Keys.barHeight) as? Double ?? 240
         barAttachToScreenEdge = defaults.bool(forKey: Keys.barAttachToScreenEdge)
         plainPasteShortcut = PlainPasteShortcut(rawValue: defaults.string(forKey: Keys.plainPasteShortcut) ?? "") ?? .commandShift

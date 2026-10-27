@@ -65,7 +65,7 @@ Get the latest pre-built apps from [Releases](https://github.com/yinxu0619/Paste
 - **Search & organization**: Real-time keyword search and source app filter; pinned items in a separate Pinboard group at the top.
 - **Full keyboard control**: `↑↓` (horizontal bar: `←→`) to select, `Home`/`End` for first/last, Return to paste, `⌘⇧↩` for plain text, `⌘⌫` to delete, `⌘P` to pin, `⌘Y` for full preview, `Esc` to close; search field auto-focused on open.
 - **Privacy & settings**: Excluded apps list (sensitive apps not recorded), history limit, clear all, launch at login, menu bar icon.
-- **Polish**: Card layout, image thumbnails, subtle hover/selection feedback, dark/light mode and multi-display support. Settings include entrance effects and a list animation toggle; system Reduce Motion is respected.
+- **Polish**: Card layout, image thumbnails, subtle hover/selection feedback, dark/light mode and multi-display support. Settings offer Effects / Balanced (default) / Responsive motion modes, plus individual controls for the entrance effect, list and selection animation, hover fade and selected-card shadow; system Reduce Motion is respected.
 - **About page**: App info and donation QR codes (WeChat / Alipay / PayPal).
 - **Localization**: Simplified Chinese / English — switch in Settings or follow system language.
 
